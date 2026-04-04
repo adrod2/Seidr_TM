@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { 
   ShieldAlert, 
@@ -18,7 +18,8 @@ import {
   Database,
   Globe,
   Smartphone,
-  Lock
+  Lock,
+  Loader2
 } from 'lucide-react';
 import {
   ReactFlow,
@@ -34,6 +35,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
 
 // --- Custom C4 Node Component ---
 const C4Node = ({ data }: any) => {
@@ -153,18 +155,59 @@ const TabButton = ({ active, icon: Icon, label, onClick }: any) => (
 export const Report = () => {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState('threats');
+  const [isLoading, setIsLoading] = useState(true);
+  const [modelData, setModelData] = useState<any>(null);
   
   // AI Copilot State
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState([
-    { id: 1, role: 'ai', content: 'Hi there! I generated this threat model for the Core Payments API. Would you like me to explain any specific threat or draft a Jira ticket for mitigation?' }
+    { id: 1, role: 'ai', content: 'Hi there! I generated this threat model. Would you like me to explain any specific threat or draft a Jira ticket for mitigation?' }
   ]);
   const [isTyping, setIsTyping] = useState(false);
   
   const nodeTypes = useMemo(() => ({ c4Node: C4Node }), []);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  // Fetch model data from DB
+  useEffect(() => {
+    const fetchModel = async () => {
+      if (!id) return;
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('threat_models')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (error) throw error;
+        
+        if (data) {
+          setModelData({
+            name: data.name,
+            description: data.description,
+            riskScore: data.risk_score || 0,
+            date: new Date(data.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to fetch model, using fallback UI data", err);
+        // Fallback for mock IDs or if DB is offline
+        setModelData({
+          name: 'Core Payments API (Mock)',
+          description: 'This is a fallback description since the model could not be loaded from the database.',
+          riskScore: 78,
+          date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchModel();
+  }, [id]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -175,13 +218,13 @@ export const Report = () => {
     setChatInput('');
     setIsTyping(true);
     
-    // Simulate smart AI response
+    // Simulate smart AI response incorporating model context
     setTimeout(() => {
       setIsTyping(false);
       setMessages(prev => [...prev, { 
         id: Date.now() + 1, 
         role: 'ai', 
-        content: `Based on my analysis of the architecture, the unauthenticated access vulnerability (T-001) occurs because the Kong API Gateway is not enforcing the JWT validation plugin on the \`/process-payment\` route. I recommend updating the Gateway declarative config and verifying the routing logic in the Next.js frontend.` 
+        content: `Based on my analysis of ${modelData?.name || 'this architecture'}, the unauthenticated access vulnerability (T-001) occurs because the Kong API Gateway is not enforcing the JWT validation plugin on the protected routes. I recommend updating the Gateway declarative config.` 
       }]);
     }, 2000);
   };
@@ -193,18 +236,37 @@ export const Report = () => {
     { id: 'T-004', title: 'Lack of Rate Limiting on Login', category: 'DoS', component: 'Auth Service', severity: 'Medium', score: 5.4, expanded: false },
   ];
 
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-8rem)]">
+        <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
+        <h2 className="text-xl font-bold">Loading Threat Model...</h2>
+        <p className="text-muted-foreground">Fetching analysis results from Seidr AI</p>
+      </div>
+    );
+  }
+
+  const getRiskLevel = (score: number) => {
+    if (score >= 80) return { label: 'Critical', color: 'text-destructive bg-destructive/10 border-destructive/20' };
+    if (score >= 60) return { label: 'High', color: 'text-orange-500 bg-orange-500/10 border-orange-500/20' };
+    if (score >= 40) return { label: 'Medium', color: 'text-amber-500 bg-amber-500/10 border-amber-500/20' };
+    return { label: 'Low', color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' };
+  };
+
+  const riskBadge = getRiskLevel(modelData?.riskScore || 0);
+
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] relative">
       <div className="flex items-center justify-between mb-6">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h2 className="text-2xl font-bold">Core Payments API</h2>
-            <span className="bg-destructive/10 text-destructive text-xs font-bold px-2.5 py-1 rounded-full border border-destructive/20">
-              Risk: High (78)
+            <h2 className="text-2xl font-bold">{modelData?.name}</h2>
+            <span className={`${riskBadge.color} text-xs font-bold px-2.5 py-1 rounded-full border`}>
+              Risk: {riskBadge.label} ({modelData?.riskScore})
             </span>
           </div>
           <p className="text-muted-foreground text-sm flex items-center gap-2">
-            Model ID: {id} <span className="px-1">•</span> Generated: April 12, 2026
+            Model ID: {id?.split('-')[0] || 'Unknown'} <span className="px-1">•</span> Generated: {modelData?.date}
           </p>
         </div>
         <div className="flex gap-3">
@@ -286,7 +348,7 @@ export const Report = () => {
                           <span>CVSS Score: <span className="font-medium text-foreground">{threat.score}</span></span>
                         </div>
                         <p className="text-sm text-muted-foreground leading-relaxed">
-                          An attacker could bypass authentication checks on the /process-payment endpoint due to missing JWT validation in the API Gateway middleware, leading to unauthorized transactions.
+                          An attacker could exploit this vulnerability. This is derived from the system context provided.
                         </p>
                       </div>
                     </div>
