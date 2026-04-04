@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, ShieldAlert, ArrowRight, Activity, Clock } from 'lucide-react';
+import { Calendar, ShieldAlert, ArrowRight, Activity, Clock, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
-const models = [
+// Fallback static data if DB is empty or fails
+const fallbackModels = [
   {
     id: 'm-1234',
     name: 'Core Payments API',
@@ -20,19 +22,49 @@ const models = [
     status: 'Completed',
     frameworks: ['STRIDE'],
     threats: 18
-  },
-  {
-    id: 'm-9012',
-    name: 'AI Recommendation Engine',
-    date: '2026-04-05',
-    riskScore: 92,
-    status: 'Action Required',
-    frameworks: ['STRIDE', 'MAESTRO'],
-    threats: 64
   }
 ];
 
 export const ModelsList = () => {
+  const [models, setModels] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchModels = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('threat_models')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          // Map DB schema to UI schema
+          const mappedData = data.map(dbModel => ({
+            id: dbModel.id,
+            name: dbModel.name,
+            date: new Date(dbModel.created_at).toISOString().split('T')[0],
+            riskScore: dbModel.risk_score || 0,
+            status: dbModel.status,
+            frameworks: ['STRIDE'], // Hardcoded for prototype
+            threats: Math.floor(Math.random() * 20) + 5 // Mocking threat count for now
+          }));
+          setModels(mappedData);
+        } else {
+          setModels(fallbackModels);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch from Supabase, using fallback data", err);
+        setModels(fallbackModels);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchModels();
+  }, []);
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-end">
@@ -48,62 +80,68 @@ export const ModelsList = () => {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {models.map(model => (
-          <Link 
-            key={model.id} 
-            to={`/models/${model.id}`}
-            className="block group"
-          >
-            <div className="bg-card border border-border/50 rounded-3xl p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all">
-              <div className="flex justify-between items-start mb-4">
-                <div className="p-3 bg-secondary/50 rounded-2xl group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                  <ShieldAlert className="h-6 w-6" />
-                </div>
-                <div className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                  model.riskScore > 80 ? 'bg-destructive/10 text-destructive' :
-                  model.riskScore > 50 ? 'bg-amber-500/10 text-amber-500' :
-                  'bg-emerald-500/10 text-emerald-500'
-                }`}>
-                  Risk Score: {model.riskScore}
-                </div>
-              </div>
-              
-              <h3 className="text-lg font-bold mb-1">{model.name}</h3>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-6">
-                <Calendar className="h-3.5 w-3.5" />
-                <span>{model.date}</span>
-                <span className="px-1">•</span>
-                <span>{model.id}</span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="bg-secondary/30 rounded-2xl p-3">
-                  <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                    <Activity className="h-3 w-3" /> Threats
+      {isLoading ? (
+        <div className="flex justify-center items-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {models.map(model => (
+            <Link 
+              key={model.id} 
+              to={`/models/${model.id}`}
+              className="block group"
+            >
+              <div className="bg-card border border-border/50 rounded-3xl p-6 shadow-sm hover:shadow-md hover:border-primary/50 transition-all h-full flex flex-col">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="p-3 bg-secondary/50 rounded-2xl group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                    <ShieldAlert className="h-6 w-6" />
                   </div>
-                  <div className="font-semibold">{model.threats} Identified</div>
-                </div>
-                <div className="bg-secondary/30 rounded-2xl p-3">
-                  <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                    <Clock className="h-3 w-3" /> Frameworks
+                  <div className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                    model.riskScore > 80 ? 'bg-destructive/10 text-destructive' :
+                    model.riskScore > 50 ? 'bg-amber-500/10 text-amber-500' :
+                    'bg-emerald-500/10 text-emerald-500'
+                  }`}>
+                    Risk Score: {model.riskScore}
                   </div>
-                  <div className="font-semibold text-xs mt-1">{model.frameworks.join(', ')}</div>
                 </div>
-              </div>
+                
+                <h3 className="text-lg font-bold mb-1 truncate">{model.name}</h3>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-6">
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span>{model.date}</span>
+                  <span className="px-1">•</span>
+                  <span className="truncate w-16" title={model.id}>{model.id.split('-')[0]}...</span>
+                </div>
 
-              <div className="flex items-center justify-between border-t border-border/50 pt-4 mt-auto">
-                <span className={`text-sm font-medium ${model.status === 'Completed' ? 'text-emerald-500' : 'text-amber-500'}`}>
-                  {model.status}
-                </span>
-                <div className="text-primary group-hover:translate-x-1 transition-transform">
-                  <ArrowRight className="h-5 w-5" />
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="bg-secondary/30 rounded-2xl p-3">
+                    <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                      <Activity className="h-3 w-3" /> Threats
+                    </div>
+                    <div className="font-semibold">{model.threats} Identified</div>
+                  </div>
+                  <div className="bg-secondary/30 rounded-2xl p-3">
+                    <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                      <Clock className="h-3 w-3" /> Frameworks
+                    </div>
+                    <div className="font-semibold text-xs mt-1">{model.frameworks.join(', ')}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between border-t border-border/50 pt-4 mt-auto">
+                  <span className={`text-sm font-medium ${model.status === 'Completed' ? 'text-emerald-500' : 'text-amber-500'}`}>
+                    {model.status}
+                  </span>
+                  <div className="text-primary group-hover:translate-x-1 transition-transform">
+                    <ArrowRight className="h-5 w-5" />
+                  </div>
                 </div>
               </div>
-            </div>
-          </Link>
-        ))}
-      </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
