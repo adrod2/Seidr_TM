@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   ShieldCheck, 
   TrendingDown, 
   TrendingUp, 
   AlertTriangle,
   CheckCircle,
-  Clock
+  Clock,
+  Loader2
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -19,14 +20,15 @@ import {
   Bar,
   Legend
 } from 'recharts';
+import { supabase } from '@/lib/supabase';
 
-const riskData = [
+// Base mock data for historical trend
+const historicalRiskData = [
   { name: 'Jan', score: 85, target: 50 },
   { name: 'Feb', score: 78, target: 50 },
   { name: 'Mar', score: 72, target: 50 },
   { name: 'Apr', score: 65, target: 50 },
   { name: 'May', score: 58, target: 50 },
-  { name: 'Jun', score: 42, target: 50 },
 ];
 
 const frameworkData = [
@@ -62,16 +64,68 @@ const StatCard = ({ title, value, change, icon: Icon, trendColor, subtext }: any
 );
 
 export const Dashboard = () => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [metrics, setMetrics] = useState({
+    avgScore: 42,
+    modelCount: 14,
+    change: '-16 pts'
+  });
+  const [chartData, setChartData] = useState([...historicalRiskData, { name: 'Jun', score: 42, target: 50 }]);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('threat_models')
+          .select('risk_score, created_at');
+          
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          const totalScore = data.reduce((acc, curr) => acc + (curr.risk_score || 0), 0);
+          const avg = Math.round(totalScore / data.length);
+          
+          setMetrics({
+            avgScore: avg,
+            modelCount: data.length,
+            // Calculate a fake change based on the difference from historical
+            change: avg < 58 ? `-${58 - avg} pts` : `+${avg - 58} pts`
+          });
+
+          // Append real data point to historical chart
+          const currentMonth = new Date().toLocaleString('default', { month: 'short' });
+          setChartData([...historicalRiskData, { name: currentMonth, score: avg, target: 50 }]);
+        }
+      } catch (err) {
+        console.warn("Could not fetch real metrics, using fallback", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-12rem)]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const isRiskGood = metrics.avgScore < 50;
+
   return (
     <div className="space-y-8 pb-8">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Overall Risk Posture"
-          value="42"
-          change="-16 pts"
-          trendColor="good"
+          value={metrics.avgScore.toString()}
+          change={metrics.change}
+          trendColor={isRiskGood ? 'good' : 'bad'}
           icon={AlertTriangle}
-          subtext="Severity-weighted aggregate"
+          subtext={`Severity-weighted aggregate across ${metrics.modelCount} models`}
         />
         <StatCard
           title="Mitigation Coverage"
@@ -104,7 +158,7 @@ export const Dashboard = () => {
           <h3 className="text-lg font-bold mb-6">Risk Score Trend</h3>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={riskData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>

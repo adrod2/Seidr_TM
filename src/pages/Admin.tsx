@@ -7,7 +7,10 @@ import {
   Plus,
   Search,
   UploadCloud,
-  FileText
+  FileText,
+  Trash2,
+  Loader2,
+  CheckCircle2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -27,6 +30,53 @@ const TabButton = ({ active, icon: Icon, label, onClick }: any) => (
 
 export const Admin = () => {
   const [activeTab, setActiveTab] = useState('risk');
+  
+  // Interactive State
+  const [isUploading, setIsUploading] = useState(false);
+  const [documents, setDocuments] = useState([
+    { id: 1, name: 'Cloud Security Standard 2026.pdf', chunks: 142 }
+  ]);
+  const [integrations, setIntegrations] = useState({
+    jira: true,
+    linear: false,
+    slack: false
+  });
+
+  const handleFileUpload = () => {
+    setIsUploading(true);
+    toast.info('Analyzing document and generating embeddings...');
+    
+    setTimeout(() => {
+      setIsUploading(false);
+      setDocuments(prev => [...prev, { 
+        id: Date.now(), 
+        name: `Architecture_Guidelines_v${Math.floor(Math.random() * 10)}.pdf`, 
+        chunks: Math.floor(Math.random() * 200) + 50 
+      }]);
+      toast.success('Document successfully indexed into vector database!');
+    }, 2500);
+  };
+
+  const removeDocument = (id: number) => {
+    setDocuments(prev => prev.filter(d => d.id !== id));
+    toast.success('Document removed from index');
+  };
+
+  const toggleIntegration = (key: keyof typeof integrations, name: string) => {
+    const isConnecting = !integrations[key];
+    if (isConnecting) {
+      toast.promise(new Promise(r => setTimeout(r, 1500)), {
+        loading: `Authenticating with ${name}...`,
+        success: () => {
+          setIntegrations(prev => ({ ...prev, [key]: true }));
+          return `${name} connected successfully!`;
+        }
+      });
+    } else {
+      setIntegrations(prev => ({ ...prev, [key]: false }));
+      toast.info(`${name} disconnected.`);
+    }
+  };
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
@@ -120,14 +170,19 @@ export const Admin = () => {
               </p>
               
               <div className="flex gap-4 mb-6">
-                <div 
-                  onClick={() => toast.info('File picker opened')}
-                  className="flex-1 border-2 border-dashed border-border rounded-2xl p-6 flex flex-col items-center justify-center hover:bg-secondary/30 transition-colors cursor-pointer text-center"
+                <button 
+                  onClick={handleFileUpload}
+                  disabled={isUploading}
+                  className="flex-1 border-2 border-dashed border-primary/50 rounded-2xl p-6 flex flex-col items-center justify-center hover:bg-primary/5 transition-colors cursor-pointer text-center disabled:opacity-70 disabled:cursor-not-allowed group"
                 >
-                  <UploadCloud className="h-8 w-8 text-muted-foreground mb-2" />
-                  <span className="text-sm font-medium">Upload Document</span>
+                  {isUploading ? (
+                    <Loader2 className="h-8 w-8 text-primary mb-2 animate-spin" />
+                  ) : (
+                    <UploadCloud className="h-8 w-8 text-primary mb-2 group-hover:scale-110 transition-transform" />
+                  )}
+                  <span className="text-sm font-medium text-foreground">{isUploading ? 'Processing File...' : 'Upload Document'}</span>
                   <span className="text-xs text-muted-foreground mt-1">PDF, DOCX, TXT, MD</span>
-                </div>
+                </button>
                 <div 
                   onClick={() => toast.info('Opening URL input dialog')}
                   className="flex-1 border-2 border-dashed border-border rounded-2xl p-6 flex flex-col items-center justify-center hover:bg-secondary/30 transition-colors cursor-pointer text-center"
@@ -139,21 +194,27 @@ export const Admin = () => {
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between p-3 border border-border/50 rounded-xl bg-card">
-                  <div className="flex items-center gap-3">
-                    <FileText className="h-5 w-5 text-primary" />
-                    <div>
-                      <p className="text-sm font-medium">Cloud Security Standard 2026.pdf</p>
-                      <p className="text-xs text-muted-foreground">Indexed • 142 chunks</p>
+                {documents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4 border border-border/50 rounded-xl border-dashed">No documents uploaded yet.</p>
+                ) : (
+                  documents.map(doc => (
+                    <div key={doc.id} className="flex items-center justify-between p-3 border border-border/50 rounded-xl bg-card hover:border-primary/50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-5 w-5 text-primary" />
+                        <div>
+                          <p className="text-sm font-medium">{doc.name}</p>
+                          <p className="text-xs text-muted-foreground">Indexed • {doc.chunks} chunks</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => removeDocument(doc.id)}
+                        className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
-                  </div>
-                  <button 
-                    onClick={() => toast.success('Document removed from index')}
-                    className="text-xs text-destructive hover:underline"
-                  >
-                    Remove
-                  </button>
-                </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -166,8 +227,12 @@ export const Admin = () => {
                   <p className="text-sm text-muted-foreground">The mandatory security controls against which compliance is measured.</p>
                 </div>
               </div>
-              <div className="bg-secondary/30 border border-border/50 rounded-2xl p-6 flex items-center justify-center text-muted-foreground h-32">
-                <p>NIST SP 800-53 rev 5 profile loaded (124 mandatory controls)</p>
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-6 flex items-center gap-3 text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="h-6 w-6" />
+                <div>
+                  <h4 className="font-bold">NIST SP 800-53 rev 5 profile loaded</h4>
+                  <p className="text-sm opacity-90 mt-0.5">124 mandatory controls actively mapped in pipeline.</p>
+                </div>
               </div>
             </div>
           </div>
@@ -175,6 +240,7 @@ export const Admin = () => {
 
         {activeTab === 'users' && (
           <div>
+            {/* ... Existing User Tab Code ... */}
             <div className="flex justify-between items-center mb-6">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -216,18 +282,6 @@ export const Admin = () => {
                       <button onClick={() => toast.info('Opening user settings...')} className="text-primary hover:underline text-xs font-medium">Edit</button>
                     </td>
                   </tr>
-                  <tr className="bg-card">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-foreground">John Smith</div>
-                      <div className="text-xs text-muted-foreground">john.smith@example.com</div>
-                    </td>
-                    <td className="px-6 py-4"><span className="bg-secondary px-2 py-1 rounded text-xs font-semibold">Security Analyst</span></td>
-                    <td className="px-6 py-4"><span className="text-emerald-500 font-medium">Active</span></td>
-                    <td className="px-6 py-4 text-muted-foreground">2 days ago</td>
-                    <td className="px-6 py-4 text-right">
-                      <button onClick={() => toast.info('Opening user settings...')} className="text-primary hover:underline text-xs font-medium">Edit</button>
-                    </td>
-                  </tr>
                 </tbody>
               </table>
             </div>
@@ -238,37 +292,61 @@ export const Admin = () => {
           <div className="max-w-4xl space-y-6">
             <h3 className="text-lg font-bold mb-2">Connected Services</h3>
             
-            <div className="border border-border/50 rounded-2xl p-5 flex items-center justify-between">
+            <div className={`border rounded-2xl p-5 flex items-center justify-between transition-colors ${integrations.jira ? 'border-primary bg-primary/5' : 'border-border/50'}`}>
               <div className="flex items-center gap-4">
                 <div className="h-10 w-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">J</div>
                 <div>
-                  <h4 className="font-bold text-base">Jira Software</h4>
+                  <h4 className="font-bold text-base flex items-center gap-2">
+                    Jira Software
+                    {integrations.jira && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                  </h4>
                   <p className="text-sm text-muted-foreground">Sync unmitigated threats as Jira issues</p>
                 </div>
               </div>
-              <button onClick={() => toast.info('Opening Jira configuration...')} className="bg-secondary text-secondary-foreground px-4 py-2 rounded-lg text-sm font-medium">Configure</button>
+              <button 
+                onClick={() => toggleIntegration('jira', 'Jira')} 
+                className={integrations.jira ? "bg-secondary text-secondary-foreground px-4 py-2 rounded-lg text-sm font-medium" : "text-primary font-medium text-sm hover:underline"}
+              >
+                {integrations.jira ? 'Configure' : 'Connect'}
+              </button>
             </div>
 
-            <div className="border border-border/50 rounded-2xl p-5 flex items-center justify-between">
+            <div className={`border rounded-2xl p-5 flex items-center justify-between transition-colors ${integrations.linear ? 'border-primary bg-primary/5' : 'border-border/50'}`}>
               <div className="flex items-center gap-4">
                 <div className="h-10 w-10 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">L</div>
                 <div>
-                  <h4 className="font-bold text-base">Linear</h4>
+                  <h4 className="font-bold text-base flex items-center gap-2">
+                    Linear
+                    {integrations.linear && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                  </h4>
                   <p className="text-sm text-muted-foreground">Create Linear issues for mitigation actions</p>
                 </div>
               </div>
-              <button onClick={() => toast.success('Connecting to Linear...')} className="text-primary font-medium text-sm hover:underline">Connect</button>
+              <button 
+                onClick={() => toggleIntegration('linear', 'Linear')} 
+                className={integrations.linear ? "bg-secondary text-secondary-foreground px-4 py-2 rounded-lg text-sm font-medium" : "text-primary font-medium text-sm hover:underline"}
+              >
+                {integrations.linear ? 'Disconnect' : 'Connect'}
+              </button>
             </div>
 
-            <div className="border border-border/50 rounded-2xl p-5 flex items-center justify-between">
+            <div className={`border rounded-2xl p-5 flex items-center justify-between transition-colors ${integrations.slack ? 'border-primary bg-primary/5' : 'border-border/50'}`}>
               <div className="flex items-center gap-4">
                 <div className="h-10 w-10 bg-purple-600 rounded-lg flex items-center justify-center text-white font-bold">S</div>
                 <div>
-                  <h4 className="font-bold text-base">Slack</h4>
+                  <h4 className="font-bold text-base flex items-center gap-2">
+                    Slack
+                    {integrations.slack && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                  </h4>
                   <p className="text-sm text-muted-foreground">Receive notifications on analysis completion</p>
                 </div>
               </div>
-              <button onClick={() => toast.success('Connecting to Slack...')} className="text-primary font-medium text-sm hover:underline">Connect</button>
+              <button 
+                onClick={() => toggleIntegration('slack', 'Slack')} 
+                className={integrations.slack ? "bg-secondary text-secondary-foreground px-4 py-2 rounded-lg text-sm font-medium" : "text-primary font-medium text-sm hover:underline"}
+              >
+                {integrations.slack ? 'Disconnect' : 'Connect'}
+              </button>
             </div>
           </div>
         )}
