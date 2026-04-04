@@ -39,12 +39,28 @@ const analysisSteps = [
   "Generating final threat model report..."
 ];
 
+const DEPLOYMENT_OPTIONS = ['AWS', 'GCP', 'Azure', 'On-Premise', 'Hybrid'];
+const AUTH_OPTIONS = ['OIDC/OAuth2', 'SAML', 'JWT', 'Session', 'API Keys', 'MFA Enforced'];
+
 export const NewModel = () => {
   const [activeTab, setActiveTab] = useState('text');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
-  const [description, setDescription] = useState('');
   const navigate = useNavigate();
+
+  // --- Form State ---
+  const [modelName, setModelName] = useState('New System Analysis');
+  const [description, setDescription] = useState('');
+  const [deployment, setDeployment] = useState<string[]>([]);
+  const [authMethods, setAuthMethods] = useState<string[]>([]);
+  const [dataClassification, setDataClassification] = useState('');
+  const [repoUrl, setRepoUrl] = useState('');
+  const [docTitle, setDocTitle] = useState('');
+  const [docContent, setDocContent] = useState('');
+
+  const toggleArrayItem = (setter: React.Dispatch<React.SetStateAction<string[]>>, item: string) => {
+    setter(prev => prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]);
+  };
 
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
@@ -52,9 +68,19 @@ export const NewModel = () => {
 
     const result = await startAnalysisPipeline(
       {
-        name: "New System Analysis",
-        description: description || "Generic system architecture",
-        frameworks: ['STRIDE']
+        name: modelName,
+        description: description,
+        frameworks: ['STRIDE'],
+        questionnaire: {
+          deployment,
+          authMethods,
+          dataClassification
+        },
+        repositoryUrl: repoUrl,
+        documentation: {
+          title: docTitle,
+          content: docContent
+        }
       },
       (stepNumber) => {
         setCurrentStep(stepNumber);
@@ -63,7 +89,6 @@ export const NewModel = () => {
 
     if (result.success) {
       toast.success('Threat model generated successfully');
-      // Adding a small delay for UI smoothness before redirecting
       setTimeout(() => navigate(`/models/${result.modelId}`), 800);
     } else {
       toast.error(`Analysis failed: ${result.error}`);
@@ -132,9 +157,15 @@ export const NewModel = () => {
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold">Create Threat Model</h2>
-          <p className="text-muted-foreground text-sm mt-1">Provide system context to begin the analysis. All inputs are optional.</p>
+        <div className="flex-1 max-w-md">
+          <input 
+            type="text"
+            value={modelName}
+            onChange={(e) => setModelName(e.target.value)}
+            className="text-2xl font-bold bg-transparent border-none outline-none focus:ring-0 p-0 mb-1 w-full placeholder:text-muted-foreground/50"
+            placeholder="Name your threat model..."
+          />
+          <p className="text-muted-foreground text-sm">Provide system context to begin the analysis. All inputs are optional.</p>
         </div>
         <button 
           onClick={handleAnalyze}
@@ -164,7 +195,7 @@ export const NewModel = () => {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="flex-1 bg-secondary/30 border border-border/50 rounded-2xl p-4 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none w-full"
-              placeholder="e.g. The system is a multi-tenant SaaS application running on AWS. It uses a React frontend, a Node.js API backend, and a PostgreSQL database. Authentication is handled via Auth0. Users upload PDF files which are processed by an async worker..."
+              placeholder="e.g. The system is a multi-tenant SaaS application running on AWS. It uses a React frontend, a Node.js API backend, and a PostgreSQL database. Authentication is handled via Auth0..."
             ></textarea>
             <p className="text-xs text-muted-foreground mt-4">
               * Note: The 3-gate security pipeline is active. Try pasting an email address to see PII redaction in action, or type "ignore previous instructions" to trigger the prompt injection shield!
@@ -172,44 +203,69 @@ export const NewModel = () => {
           </div>
         )}
 
-        {/* ... The rest of the tabs remain exactly as they were */}
         {activeTab === 'questionnaire' && (
           <div className="max-w-3xl space-y-8">
             <h3 className="text-lg font-semibold mb-2">Guided Questionnaire</h3>
             
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div>
-                <label className="block text-sm font-medium mb-2">Deployment Model</label>
+                <label className="block text-sm font-medium mb-3">Deployment Model</label>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {['AWS', 'GCP', 'Azure', 'On-Premise', 'Hybrid'].map(opt => (
-                    <div key={opt} className="border border-border/50 rounded-xl p-3 flex items-center gap-2 cursor-pointer hover:bg-secondary/50">
-                      <input type="checkbox" className="rounded text-primary" />
-                      <span className="text-sm">{opt}</span>
+                  {DEPLOYMENT_OPTIONS.map(opt => (
+                    <div 
+                      key={opt} 
+                      onClick={() => toggleArrayItem(setDeployment, opt)}
+                      className={`border rounded-xl p-3 flex items-center gap-2 cursor-pointer transition-colors ${
+                        deployment.includes(opt) ? 'bg-primary/10 border-primary text-primary' : 'border-border/50 hover:bg-secondary/50'
+                      }`}
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={deployment.includes(opt)}
+                        readOnly
+                        className="rounded text-primary pointer-events-none" 
+                      />
+                      <span className="text-sm font-medium">{opt}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Authentication Methods</label>
+                <label className="block text-sm font-medium mb-3">Authentication Methods</label>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {['OIDC/OAuth2', 'SAML', 'JWT', 'Session', 'API Keys', 'MFA Enforced'].map(opt => (
-                    <div key={opt} className="border border-border/50 rounded-xl p-3 flex items-center gap-2 cursor-pointer hover:bg-secondary/50">
-                      <input type="checkbox" className="rounded text-primary" />
-                      <span className="text-sm">{opt}</span>
+                  {AUTH_OPTIONS.map(opt => (
+                    <div 
+                      key={opt} 
+                      onClick={() => toggleArrayItem(setAuthMethods, opt)}
+                      className={`border rounded-xl p-3 flex items-center gap-2 cursor-pointer transition-colors ${
+                        authMethods.includes(opt) ? 'bg-primary/10 border-primary text-primary' : 'border-border/50 hover:bg-secondary/50'
+                      }`}
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={authMethods.includes(opt)}
+                        readOnly
+                        className="rounded text-primary pointer-events-none" 
+                      />
+                      <span className="text-sm font-medium">{opt}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Data Classification</label>
-                <select className="w-full bg-secondary/30 border border-border/50 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary/50">
-                  <option>Select highest data classification level</option>
-                  <option>Public / Unclassified</option>
-                  <option>Internal / Confidential</option>
-                  <option>PII / PHI / Regulated</option>
-                  <option>Highly Restricted / Secrets</option>
+                <label className="block text-sm font-medium mb-3">Data Classification</label>
+                <select 
+                  value={dataClassification}
+                  onChange={(e) => setDataClassification(e.target.value)}
+                  className="w-full bg-secondary/30 border border-border/50 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                >
+                  <option value="">Select highest data classification level</option>
+                  <option value="Public / Unclassified">Public / Unclassified</option>
+                  <option value="Internal / Confidential">Internal / Confidential</option>
+                  <option value="PII / PHI / Regulated">PII / PHI / Regulated</option>
+                  <option value="Highly Restricted / Secrets">Highly Restricted / Secrets</option>
                 </select>
               </div>
             </div>
@@ -220,7 +276,7 @@ export const NewModel = () => {
           <div className="h-full flex flex-col items-center justify-center">
             <div className="max-w-md w-full text-center">
               <div 
-                onClick={() => toast.info('File picker opened')}
+                onClick={() => toast.success('Architecture diagram attached to context payload.')}
                 className="bg-secondary/30 border-2 border-dashed border-border rounded-3xl p-12 flex flex-col items-center justify-center hover:bg-secondary/50 transition-colors cursor-pointer"
               >
                 <Upload className="h-12 w-12 text-muted-foreground mb-4" />
@@ -241,10 +297,16 @@ export const NewModel = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-2">Repository URL</label>
-                <input type="text" className="w-full bg-secondary/30 border border-border/50 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="https://github.com/org/repo" />
+                <input 
+                  type="text" 
+                  value={repoUrl}
+                  onChange={(e) => setRepoUrl(e.target.value)}
+                  className="w-full bg-secondary/30 border border-border/50 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary/50" 
+                  placeholder="https://github.com/org/repo" 
+                />
               </div>
               <button 
-                onClick={() => toast.promise(new Promise(r => setTimeout(r, 1500)), { loading: 'Verifying connection...', success: 'Repository connected successfully!' })}
+                onClick={() => toast.promise(new Promise(r => setTimeout(r, 1500)), { loading: 'Verifying connection...', success: 'Repository connected and ready for scan!' })}
                 className="bg-secondary text-secondary-foreground px-4 py-2 rounded-xl font-medium text-sm mt-2 hover:bg-secondary/80 transition-colors"
               >
                 Verify Connection
@@ -257,9 +319,20 @@ export const NewModel = () => {
           <div className="h-full flex flex-col">
             <h3 className="text-lg font-semibold mb-4">Documentation Pastes</h3>
             <div className="flex gap-4 mb-4">
-              <input type="text" className="flex-1 bg-secondary/30 border border-border/50 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="Document Title (e.g. ADR-001: Auth Strategy)" />
+              <input 
+                type="text" 
+                value={docTitle}
+                onChange={(e) => setDocTitle(e.target.value)}
+                className="flex-1 bg-secondary/30 border border-border/50 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm" 
+                placeholder="Document Title (e.g. ADR-001: Auth Strategy)" 
+              />
             </div>
-            <textarea className="flex-1 bg-secondary/30 border border-border/50 rounded-xl p-4 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none w-full font-mono text-sm" placeholder="Paste document content here..."></textarea>
+            <textarea 
+              value={docContent}
+              onChange={(e) => setDocContent(e.target.value)}
+              className="flex-1 bg-secondary/30 border border-border/50 rounded-xl p-4 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none w-full font-mono text-sm" 
+              placeholder="Paste document content here..."
+            ></textarea>
           </div>
         )}
       </div>
