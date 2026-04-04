@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
   HelpCircle, 
@@ -8,9 +8,11 @@ import {
   Upload,
   Play,
   CheckCircle2,
-  AlertCircle
+  Loader2,
+  Sparkles
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const TabButton = ({ active, icon: Icon, label, onClick }: any) => (
   <button
@@ -26,15 +28,99 @@ const TabButton = ({ active, icon: Icon, label, onClick }: any) => (
   </button>
 );
 
+const analysisSteps = [
+  "Ingesting system context and user inputs...",
+  "Parsing architecture diagrams and data flows...",
+  "Identifying trust boundaries and components...",
+  "Applying STRIDE framework and heuristic rules...",
+  "Evaluating compliance against NIST SP 800-53...",
+  "Generating final threat model report..."
+];
+
 export const NewModel = () => {
   const [activeTab, setActiveTab] = useState('text');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (isAnalyzing) {
+      let step = 0;
+      const interval = setInterval(() => {
+        step += 1;
+        if (step < analysisSteps.length) {
+          setCurrentStep(step);
+        } else {
+          clearInterval(interval);
+          setTimeout(() => navigate('/models/m-1234'), 800);
+        }
+      }, 2000); // 2 seconds per mock step
+      
+      return () => clearInterval(interval);
+    }
+  }, [isAnalyzing, navigate]);
+
   const handleAnalyze = () => {
-    // In a real app, we'd submit to the backend here.
-    // For now, redirect to a "loading" or directly to the report page.
-    navigate('/models/m-1234');
+    setIsAnalyzing(true);
   };
+
+  if (isAnalyzing) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-12rem)] max-w-lg mx-auto">
+        <motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="relative mb-8"
+        >
+          <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full"></div>
+          <div className="bg-primary text-primary-foreground p-5 rounded-3xl relative shadow-xl">
+            <Sparkles className="h-10 w-10 animate-pulse" />
+          </div>
+        </motion.div>
+        
+        <h2 className="text-2xl font-bold mb-2">Analyzing System Architecture</h2>
+        <p className="text-muted-foreground text-center mb-10">
+          Seidr AI is building your threat model. This usually takes a minute.
+        </p>
+
+        <div className="w-full space-y-4">
+          {analysisSteps.map((step, index) => {
+            const isCompleted = index < currentStep;
+            const isCurrent = index === currentStep;
+            const isPending = index > currentStep;
+
+            return (
+              <motion.div 
+                key={step}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ 
+                  opacity: isPending ? 0.4 : 1, 
+                  x: 0,
+                  scale: isCurrent ? 1.02 : 1
+                }}
+                className={`flex items-center gap-4 p-4 rounded-2xl border transition-colors ${
+                  isCurrent ? 'bg-card border-primary shadow-sm' : 'border-transparent'
+                }`}
+              >
+                <div className="flex-shrink-0">
+                  {isCompleted ? (
+                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                  ) : isCurrent ? (
+                    <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                  ) : (
+                    <div className="h-5 w-5 rounded-full border-2 border-border" />
+                  )}
+                </div>
+                <span className={`text-sm font-medium ${isCurrent ? 'text-primary' : isPending ? 'text-muted-foreground' : 'text-foreground'}`}>
+                  {step}
+                </span>
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">

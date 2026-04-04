@@ -8,7 +8,13 @@ import {
   AlertTriangle,
   Download,
   Share2,
-  Filter
+  Filter,
+  MessageSquare,
+  X,
+  Send,
+  Sparkles,
+  CheckCircle2,
+  ThumbsDown
 } from 'lucide-react';
 import {
   ReactFlow,
@@ -19,6 +25,7 @@ import {
   useEdgesState,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const initialNodes = [
   { id: '1', position: { x: 250, y: 50 }, data: { label: 'User (Browser)' }, style: { background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px' } },
@@ -52,11 +59,37 @@ export const Report = () => {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState('threats');
   
+  // AI Copilot State
+  const [isCopilotOpen, setIsCopilotOpen] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const [messages, setMessages] = useState([
+    { id: 1, role: 'ai', content: 'Hi there! I generated this threat model for the Core Payments API. Would you like me to explain any specific threat or draft a Jira ticket for mitigation?' }
+  ]);
+  
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+    
+    // Add user message
+    const newMsg = { id: Date.now(), role: 'user', content: chatInput };
+    setMessages(prev => [...prev, newMsg]);
+    setChatInput('');
+    
+    // Simulate AI response
+    setTimeout(() => {
+      setMessages(prev => [...prev, { 
+        id: Date.now() + 1, 
+        role: 'ai', 
+        content: 'Based on the system context, that vulnerability stems from the lack of TLS enforcement between the API Gateway and the Primary DB. I recommend applying the mitigation defined in ACT-003.' 
+      }]);
+    }, 1500);
+  };
+
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)]">
+    <div className="flex flex-col h-[calc(100vh-8rem)] relative">
       <div className="flex items-center justify-between mb-6">
         <div>
           <div className="flex items-center gap-3 mb-1">
@@ -70,13 +103,20 @@ export const Report = () => {
           </p>
         </div>
         <div className="flex gap-3">
+          <button 
+            onClick={() => setIsCopilotOpen(true)}
+            className="bg-accent/10 text-accent px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-accent/20 transition-all border border-accent/20"
+          >
+            <Sparkles className="h-4 w-4" />
+            AI Copilot
+          </button>
           <button className="bg-secondary/50 text-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-secondary transition-all">
             <Share2 className="h-4 w-4" />
             Share
           </button>
           <button className="bg-primary text-primary-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-primary/90 transition-all shadow-sm">
             <Download className="h-4 w-4" />
-            Export PDF
+            Export
           </button>
         </div>
       </div>
@@ -88,183 +128,270 @@ export const Report = () => {
         <TabButton active={activeTab === 'compliance'} onClick={() => setActiveTab('compliance')} icon={FileCheck} label="Compliance" />
       </div>
 
-      <div className="bg-card border border-border/50 rounded-3xl shadow-sm flex-1 mt-4 overflow-hidden flex flex-col">
-        {activeTab === 'threats' && (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-border/50 flex justify-between items-center bg-secondary/20">
-              <div className="flex gap-2">
-                <select className="bg-background border border-border/50 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
-                  <option>All Categories</option>
-                  <option>Spoofing</option>
-                  <option>Tampering</option>
-                  <option>Information Disclosure</option>
-                </select>
-                <select className="bg-background border border-border/50 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
-                  <option>All Severities</option>
-                  <option>Critical</option>
-                  <option>High</option>
-                  <option>Medium</option>
-                </select>
-              </div>
-              <button className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm">
-                <Filter className="h-4 w-4" /> Filter
-              </button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {[
-                { id: 'T-001', title: 'Unauthenticated API Access to Payment Gateway', category: 'Spoofing', component: 'API Gateway', severity: 'Critical', score: 9.2 },
-                { id: 'T-002', title: 'SQL Injection in Transaction Query', category: 'Tampering', component: 'Primary DB', severity: 'High', score: 8.5 },
-                { id: 'T-003', title: 'Cleartext Transmission of PII Data', category: 'Info Disclosure', component: 'Internal Network', severity: 'High', score: 7.8 },
-                { id: 'T-004', title: 'Lack of Rate Limiting on Login', category: 'DoS', component: 'Auth Service', severity: 'Medium', score: 5.4 },
-              ].map(threat => (
-                <div key={threat.id} className="border border-border/50 rounded-2xl p-4 hover:border-primary/50 transition-colors cursor-pointer flex gap-4">
-                  <div className={`mt-1 flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${
-                    threat.severity === 'Critical' ? 'bg-destructive/10 text-destructive' : 
-                    threat.severity === 'High' ? 'bg-orange-500/10 text-orange-500' :
-                    'bg-amber-500/10 text-amber-500'
-                  }`}>
-                    <AlertTriangle className="h-5 w-5" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start mb-1">
-                      <h4 className="font-bold text-base">{threat.title}</h4>
-                      <span className="text-sm font-mono text-muted-foreground">{threat.id}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-sm text-muted-foreground mb-3">
-                      <span className="bg-secondary px-2 py-0.5 rounded-md text-xs font-medium text-foreground">{threat.category}</span>
-                      <span>Component: {threat.component}</span>
-                      <span>Score: {threat.score}</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      An attacker could bypass authentication checks on the /process-payment endpoint due to missing JWT validation in the API Gateway middleware...
-                    </p>
-                  </div>
+      <div className="bg-card border border-border/50 rounded-3xl shadow-sm flex-1 mt-4 overflow-hidden flex">
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {activeTab === 'threats' && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="p-4 border-b border-border/50 flex justify-between items-center bg-secondary/20">
+                <div className="flex gap-2">
+                  <select className="bg-background border border-border/50 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+                    <option>All Categories</option>
+                    <option>Spoofing</option>
+                    <option>Tampering</option>
+                    <option>Information Disclosure</option>
+                  </select>
+                  <select className="bg-background border border-border/50 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+                    <option>All Severities</option>
+                    <option>Critical</option>
+                    <option>High</option>
+                    <option>Medium</option>
+                  </select>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'c4' && (
-          <div className="flex-1 relative bg-secondary/10">
-            <div className="absolute top-4 left-4 z-10 flex gap-2">
-              <button className="bg-background border border-border/50 shadow-sm px-3 py-1.5 rounded-lg text-sm font-medium">L1 Context</button>
-              <button className="bg-primary text-primary-foreground shadow-sm px-3 py-1.5 rounded-lg text-sm font-medium">L2 Container</button>
-              <button className="bg-background border border-border/50 shadow-sm px-3 py-1.5 rounded-lg text-sm font-medium">L3 Component</button>
-            </div>
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              fitView
-              attributionPosition="bottom-right"
-            >
-              <Background color="#ccc" gap={16} />
-              <MiniMap style={{ borderRadius: '8px', border: '1px solid #cbd5e1' }} />
-              <Controls style={{ borderRadius: '8px', border: '1px solid #cbd5e1', overflow: 'hidden' }} />
-            </ReactFlow>
-          </div>
-        )}
-
-        {activeTab === 'mitigations' && (
-          <div className="flex-1 overflow-y-auto p-6">
-            <h3 className="text-lg font-bold mb-6">Mitigation Action Plan</h3>
-            <div className="space-y-6">
-              {[
-                { id: 'ACT-001', threatId: 'T-001', title: 'Implement JWT Validation Middleware', effort: 'Medium', status: 'Open', controls: ['AC-2', 'IA-2'] },
-                { id: 'ACT-002', threatId: 'T-002', title: 'Migrate to Parameterized Queries ORM', effort: 'High', status: 'In Progress', controls: ['SI-10'] },
-                { id: 'ACT-003', threatId: 'T-003', title: 'Enforce TLS 1.3 for Internal Traffic', effort: 'Low', status: 'Done', controls: ['SC-8'] },
-              ].map(action => (
-                <div key={action.id} className="border border-border/50 rounded-2xl p-5">
-                  <div className="flex justify-between items-start mb-2">
-                    <h4 className="font-bold text-base flex items-center gap-2">
-                      <span className="text-xs font-mono text-muted-foreground bg-secondary px-2 py-1 rounded-md">{action.id}</span>
-                      {action.title}
-                    </h4>
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                      action.status === 'Done' ? 'bg-emerald-500/10 text-emerald-500' :
-                      action.status === 'In Progress' ? 'bg-primary/10 text-primary' :
-                      'bg-secondary text-foreground'
-                    }`}>
-                      {action.status}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-4">Addresses threat {action.threatId}</p>
-                  
-                  <div className="flex gap-6 text-sm">
-                    <div>
-                      <span className="text-muted-foreground block mb-1 text-xs">Effort Estimate</span>
-                      <span className="font-medium">{action.effort}</span>
+                <button className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm">
+                  <Filter className="h-4 w-4" /> Filter
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {[
+                  { id: 'T-001', title: 'Unauthenticated API Access to Payment Gateway', category: 'Spoofing', component: 'API Gateway', severity: 'Critical', score: 9.2 },
+                  { id: 'T-002', title: 'SQL Injection in Transaction Query', category: 'Tampering', component: 'Primary DB', severity: 'High', score: 8.5 },
+                  { id: 'T-003', title: 'Cleartext Transmission of PII Data', category: 'Info Disclosure', component: 'Internal Network', severity: 'High', score: 7.8 },
+                  { id: 'T-004', title: 'Lack of Rate Limiting on Login', category: 'DoS', component: 'Auth Service', severity: 'Medium', score: 5.4 },
+                ].map(threat => (
+                  <div key={threat.id} className="border border-border/50 rounded-2xl p-5 hover:border-primary/50 transition-colors flex flex-col gap-4 group bg-background">
+                    <div className="flex gap-4">
+                      <div className={`mt-1 flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${
+                        threat.severity === 'Critical' ? 'bg-destructive/10 text-destructive' : 
+                        threat.severity === 'High' ? 'bg-orange-500/10 text-orange-500' :
+                        'bg-amber-500/10 text-amber-500'
+                      }`}>
+                        <AlertTriangle className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex justify-between items-start mb-1">
+                          <h4 className="font-bold text-base">{threat.title}</h4>
+                          <span className="text-sm font-mono text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded">{threat.id}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground mb-3">
+                          <span className="bg-secondary px-2 py-0.5 rounded-md text-xs font-medium text-foreground">{threat.category}</span>
+                          <span>Component: <span className="font-medium text-foreground">{threat.component}</span></span>
+                          <span>CVSS Score: <span className="font-medium text-foreground">{threat.score}</span></span>
+                        </div>
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                          An attacker could bypass authentication checks on the /process-payment endpoint due to missing JWT validation in the API Gateway middleware, leading to unauthorized transactions.
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-muted-foreground block mb-1 text-xs">NIST Controls</span>
-                      <div className="flex gap-1">
-                        {action.controls.map(c => (
-                          <span key={c} className="bg-secondary/50 border border-border/50 px-1.5 py-0.5 rounded text-xs">{c}</span>
-                        ))}
+                    
+                    <div className="flex justify-end gap-2 border-t border-border/50 pt-3 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button className="text-xs font-medium px-3 py-1.5 rounded-lg border border-border/50 hover:bg-secondary/50 flex items-center gap-1">
+                        <ThumbsDown className="h-3 w-3" /> False Positive
+                      </button>
+                      <button className="text-xs font-medium px-3 py-1.5 rounded-lg border border-border/50 hover:bg-secondary/50 flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Accept Risk
+                      </button>
+                      <button className="text-xs font-medium px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1">
+                        <ShieldAlert className="h-3 w-3" /> Create Mitigation
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'c4' && (
+            <div className="flex-1 relative bg-secondary/10">
+              <div className="absolute top-4 left-4 z-10 flex gap-2">
+                <button className="bg-background border border-border/50 shadow-sm px-3 py-1.5 rounded-lg text-sm font-medium">L1 Context</button>
+                <button className="bg-primary text-primary-foreground shadow-sm px-3 py-1.5 rounded-lg text-sm font-medium">L2 Container</button>
+                <button className="bg-background border border-border/50 shadow-sm px-3 py-1.5 rounded-lg text-sm font-medium">L3 Component</button>
+              </div>
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                fitView
+                attributionPosition="bottom-right"
+              >
+                <Background color="#ccc" gap={16} />
+                <MiniMap style={{ borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+                <Controls style={{ borderRadius: '8px', border: '1px solid #cbd5e1', overflow: 'hidden' }} />
+              </ReactFlow>
+            </div>
+          )}
+
+          {activeTab === 'mitigations' && (
+            <div className="flex-1 overflow-y-auto p-6">
+              <h3 className="text-lg font-bold mb-6">Mitigation Action Plan</h3>
+              <div className="space-y-6">
+                {[
+                  { id: 'ACT-001', threatId: 'T-001', title: 'Implement JWT Validation Middleware', effort: 'Medium', status: 'Open', controls: ['AC-2', 'IA-2'] },
+                  { id: 'ACT-002', threatId: 'T-002', title: 'Migrate to Parameterized Queries ORM', effort: 'High', status: 'In Progress', controls: ['SI-10'] },
+                  { id: 'ACT-003', threatId: 'T-003', title: 'Enforce TLS 1.3 for Internal Traffic', effort: 'Low', status: 'Done', controls: ['SC-8'] },
+                ].map(action => (
+                  <div key={action.id} className="border border-border/50 bg-background rounded-2xl p-5">
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="font-bold text-base flex items-center gap-2">
+                        <span className="text-xs font-mono text-muted-foreground bg-secondary px-2 py-1 rounded-md">{action.id}</span>
+                        {action.title}
+                      </h4>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                        action.status === 'Done' ? 'bg-emerald-500/10 text-emerald-500' :
+                        action.status === 'In Progress' ? 'bg-primary/10 text-primary' :
+                        'bg-secondary text-foreground'
+                      }`}>
+                        {action.status}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-4">Addresses threat {action.threatId}</p>
+                    
+                    <div className="flex gap-6 text-sm">
+                      <div>
+                        <span className="text-muted-foreground block mb-1 text-xs">Effort Estimate</span>
+                        <span className="font-medium">{action.effort}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block mb-1 text-xs">NIST Controls</span>
+                        <div className="flex gap-1">
+                          {action.controls.map(c => (
+                            <span key={c} className="bg-secondary/50 border border-border/50 px-1.5 py-0.5 rounded text-xs">{c}</span>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {activeTab === 'compliance' && (
-          <div className="flex-1 overflow-y-auto p-6">
-             <div className="grid grid-cols-3 gap-6 mb-8">
-              <div className="bg-secondary/30 p-5 rounded-2xl border border-border/50 text-center">
-                <div className="text-4xl font-bold text-primary mb-2">92%</div>
-                <div className="text-sm font-medium">Overall Compliance Score</div>
+          {activeTab === 'compliance' && (
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="grid grid-cols-3 gap-6 mb-8">
+                <div className="bg-secondary/30 p-5 rounded-2xl border border-border/50 text-center">
+                  <div className="text-4xl font-bold text-primary mb-2">92%</div>
+                  <div className="text-sm font-medium">Overall Compliance Score</div>
+                </div>
+                <div className="bg-secondary/30 p-5 rounded-2xl border border-border/50 text-center">
+                  <div className="text-4xl font-bold text-emerald-500 mb-2">45/50</div>
+                  <div className="text-sm font-medium">Mandatory Controls Met</div>
+                </div>
+                <div className="bg-secondary/30 p-5 rounded-2xl border border-border/50 text-center">
+                  <div className="text-4xl font-bold text-destructive mb-2">3</div>
+                  <div className="text-sm font-medium">Critical Gaps</div>
+                </div>
               </div>
-              <div className="bg-secondary/30 p-5 rounded-2xl border border-border/50 text-center">
-                <div className="text-4xl font-bold text-emerald-500 mb-2">45/50</div>
-                <div className="text-sm font-medium">Mandatory Controls Met</div>
-              </div>
-              <div className="bg-secondary/30 p-5 rounded-2xl border border-border/50 text-center">
-                <div className="text-4xl font-bold text-destructive mb-2">3</div>
-                <div className="text-sm font-medium">Critical Gaps</div>
-              </div>
-             </div>
 
-             <h3 className="text-lg font-bold mb-4">Control Status (NIST SP 800-53)</h3>
-             <div className="border border-border/50 rounded-2xl overflow-hidden">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-secondary/50 text-muted-foreground text-xs uppercase">
-                    <tr>
-                      <th className="px-6 py-3">Control ID</th>
-                      <th className="px-6 py-3">Title</th>
-                      <th className="px-6 py-3">Category</th>
-                      <th className="px-6 py-3">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/50">
-                    <tr className="bg-card">
-                      <td className="px-6 py-4 font-mono font-medium">AC-2</td>
-                      <td className="px-6 py-4">Account Management</td>
-                      <td className="px-6 py-4">Access Control</td>
-                      <td className="px-6 py-4"><span className="text-destructive font-semibold bg-destructive/10 px-2 py-1 rounded text-xs">Gap</span></td>
-                    </tr>
-                    <tr className="bg-card">
-                      <td className="px-6 py-4 font-mono font-medium">IA-2</td>
-                      <td className="px-6 py-4">Identification and Authentication</td>
-                      <td className="px-6 py-4">Access Control</td>
-                      <td className="px-6 py-4"><span className="text-emerald-500 font-semibold bg-emerald-500/10 px-2 py-1 rounded text-xs">Met</span></td>
-                    </tr>
-                    <tr className="bg-card">
-                      <td className="px-6 py-4 font-mono font-medium">SC-8</td>
-                      <td className="px-6 py-4">Transmission Confidentiality</td>
-                      <td className="px-6 py-4">System & Comm Protection</td>
-                      <td className="px-6 py-4"><span className="text-amber-500 font-semibold bg-amber-500/10 px-2 py-1 rounded text-xs">Partial</span></td>
-                    </tr>
-                  </tbody>
-                </table>
-             </div>
-          </div>
-        )}
+              <h3 className="text-lg font-bold mb-4">Control Status (NIST SP 800-53)</h3>
+              <div className="border border-border/50 rounded-2xl overflow-hidden">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-secondary/50 text-muted-foreground text-xs uppercase">
+                      <tr>
+                        <th className="px-6 py-3">Control ID</th>
+                        <th className="px-6 py-3">Title</th>
+                        <th className="px-6 py-3">Category</th>
+                        <th className="px-6 py-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/50">
+                      <tr className="bg-card">
+                        <td className="px-6 py-4 font-mono font-medium">AC-2</td>
+                        <td className="px-6 py-4">Account Management</td>
+                        <td className="px-6 py-4">Access Control</td>
+                        <td className="px-6 py-4"><span className="text-destructive font-semibold bg-destructive/10 px-2 py-1 rounded text-xs">Gap</span></td>
+                      </tr>
+                      <tr className="bg-card">
+                        <td className="px-6 py-4 font-mono font-medium">IA-2</td>
+                        <td className="px-6 py-4">Identification and Authentication</td>
+                        <td className="px-6 py-4">Access Control</td>
+                        <td className="px-6 py-4"><span className="text-emerald-500 font-semibold bg-emerald-500/10 px-2 py-1 rounded text-xs">Met</span></td>
+                      </tr>
+                      <tr className="bg-card">
+                        <td className="px-6 py-4 font-mono font-medium">SC-8</td>
+                        <td className="px-6 py-4">Transmission Confidentiality</td>
+                        <td className="px-6 py-4">System & Comm Protection</td>
+                        <td className="px-6 py-4"><span className="text-amber-500 font-semibold bg-amber-500/10 px-2 py-1 rounded text-xs">Partial</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* AI Copilot Slide-over Panel */}
+        <AnimatePresence>
+          {isCopilotOpen && (
+            <motion.div 
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 400, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              className="border-l border-border/50 bg-secondary/10 flex flex-col z-20 shrink-0"
+            >
+              <div className="h-14 border-b border-border/50 flex items-center justify-between px-4 bg-background">
+                <div className="flex items-center gap-2 text-accent font-medium">
+                  <Sparkles className="h-4 w-4" />
+                  Seidr AI Copilot
+                </div>
+                <button 
+                  onClick={() => setIsCopilotOpen(false)}
+                  className="p-1.5 text-muted-foreground hover:bg-secondary rounded-lg transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {messages.map(msg => (
+                  <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] rounded-2xl p-3 text-sm shadow-sm ${
+                      msg.role === 'user' 
+                        ? 'bg-primary text-primary-foreground rounded-tr-sm' 
+                        : 'bg-background border border-border/50 rounded-tl-sm'
+                    }`}>
+                      {msg.content}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 bg-background border-t border-border/50">
+                <form onSubmit={handleSendMessage} className="relative">
+                  <input 
+                    type="text" 
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Ask about this model..." 
+                    className="w-full bg-secondary/50 border border-border/50 rounded-xl pl-4 pr-10 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+                  />
+                  <button 
+                    type="submit"
+                    disabled={!chatInput.trim()}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-primary hover:bg-primary/10 rounded-lg disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+                  >
+                    <Send className="h-4 w-4" />
+                  </button>
+                </form>
+                <div className="flex gap-2 mt-3 overflow-x-auto pb-1 scrollbar-none">
+                  {['Explain T-001', 'Draft Jira Ticket', 'Suggest Mitigations'].map(suggestion => (
+                    <button 
+                      key={suggestion}
+                      type="button"
+                      onClick={() => setChatInput(suggestion)}
+                      className="whitespace-nowrap text-xs bg-secondary hover:bg-secondary/80 px-3 py-1.5 rounded-full border border-border/50 transition-colors"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
