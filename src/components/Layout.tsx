@@ -11,6 +11,7 @@ import {
   Search,
   User
 } from 'lucide-react';
+import { ThemeToggle } from './ThemeToggle';
 
 const Sidebar = () => {
   const navItems = [
@@ -86,15 +87,16 @@ const Header = () => {
       <div className="flex items-center gap-4">
         <div className="relative hidden md:block">
           <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input 
-            type="text" 
-            placeholder="Search models..." 
+          <input
+            type="text"
+            placeholder="Search models..."
             className="h-9 pl-9 pr-4 rounded-full bg-secondary/50 border-none text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all w-64"
           />
         </div>
-        <button className="p-2 text-muted-foreground hover:text-foreground relative">
+        <ThemeToggle />
+        <button className="p-2 text-muted-foreground hover:bg-secondary/50 rounded-full transition-colors relative">
           <Bell className="h-5 w-5" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive"></span>
+          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full border-2 border-background bg-destructive"></span>
         </button>
       </div>
     </header>
