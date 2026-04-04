@@ -1,3 +1,4 @@
+character in Admin.tsx">
 import React, { useState } from 'react';
 import { 
   Users, 
@@ -9,6 +10,7 @@ import {
   UploadCloud,
   FileText
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 const TabButton = ({ active, icon: Icon, label, onClick }: any) => (
   <button
@@ -51,7 +53,10 @@ export const Admin = () => {
                 {['Confidentiality', 'Integrity', 'Availability'].map(cia => (
                   <div key={cia} className="bg-secondary/30 p-4 rounded-2xl border border-border/50">
                     <label className="block text-sm font-bold mb-3">{cia}</label>
-                    <select className="w-full bg-background border border-border/50 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-primary/50 outline-none">
+                    <select 
+                      onChange={() => toast.success(`${cia} multiplier updated`)}
+                      className="w-full bg-background border border-border/50 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
+                    >
                       <option>Critical (x1.5)</option>
                       <option>High (x1.2)</option>
                       <option>Medium (x1.0)</option>
@@ -70,7 +75,10 @@ export const Admin = () => {
                   <h3 className="text-lg font-bold">Business Risk Register</h3>
                   <p className="text-sm text-muted-foreground">Threats aligning with unmitigated business risks receive a score boost.</p>
                 </div>
-                <button className="bg-secondary text-secondary-foreground px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1">
+                <button 
+                  onClick={() => toast.info('Opening risk creation modal...')}
+                  className="bg-secondary text-secondary-foreground px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1"
+                >
                   <Plus className="h-4 w-4" /> Add Risk
                 </button>
               </div>
@@ -87,7 +95,7 @@ export const Admin = () => {
                   <tbody className="divide-y divide-border/50">
                     <tr className="bg-card">
                       <td className="px-4 py-3 font-mono">BR-01</td>
-                      <td className="px-4 py-3">Ransomware attack causing &gt;24h downtime</td>
+                      <td className="px-4 py-3">Ransomware attack causing {'>'}24h downtime</td>
                       <td className="px-4 py-3">Conservative</td>
                       <td className="px-4 py-3"><span className="text-destructive font-medium">Unmitigated</span></td>
                     </tr>
@@ -113,12 +121,18 @@ export const Admin = () => {
               </p>
               
               <div className="flex gap-4 mb-6">
-                <div className="flex-1 border-2 border-dashed border-border rounded-2xl p-6 flex flex-col items-center justify-center hover:bg-secondary/30 transition-colors cursor-pointer text-center">
+                <div 
+                  onClick={() => toast.info('File picker opened')}
+                  className="flex-1 border-2 border-dashed border-border rounded-2xl p-6 flex flex-col items-center justify-center hover:bg-secondary/30 transition-colors cursor-pointer text-center"
+                >
                   <UploadCloud className="h-8 w-8 text-muted-foreground mb-2" />
                   <span className="text-sm font-medium">Upload Document</span>
                   <span className="text-xs text-muted-foreground mt-1">PDF, DOCX, TXT, MD</span>
                 </div>
-                <div className="flex-1 border-2 border-dashed border-border rounded-2xl p-6 flex flex-col items-center justify-center hover:bg-secondary/30 transition-colors cursor-pointer text-center">
+                <div 
+                  onClick={() => toast.info('Opening URL input dialog')}
+                  className="flex-1 border-2 border-dashed border-border rounded-2xl p-6 flex flex-col items-center justify-center hover:bg-secondary/30 transition-colors cursor-pointer text-center"
+                >
                   <Settings2 className="h-8 w-8 text-muted-foreground mb-2" />
                   <span className="text-sm font-medium">Add Confluence/Notion URL</span>
                   <span className="text-xs text-muted-foreground mt-1">Requires Integration setup</span>
@@ -134,7 +148,12 @@ export const Admin = () => {
                       <p className="text-xs text-muted-foreground">Indexed • 142 chunks</p>
                     </div>
                   </div>
-                  <button className="text-xs text-destructive hover:underline">Remove</button>
+                  <button 
+                    onClick={() => toast.success('Document removed from index')}
+                    className="text-xs text-destructive hover:underline"
+                  >
+                    Remove
+                  </button>
                 </div>
               </div>
             </div>
@@ -166,7 +185,10 @@ export const Admin = () => {
                   className="pl-9 pr-4 py-2 bg-secondary/30 border border-border/50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 w-64"
                 />
               </div>
-              <button className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-primary/90 transition-all">
+              <button 
+                onClick={() => toast.success('Invitation link sent successfully!')}
+                className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-primary/90 transition-all"
+              >
                 <Plus className="h-4 w-4" /> Invite User
               </button>
             </div>
@@ -192,7 +214,7 @@ export const Admin = () => {
                     <td className="px-6 py-4"><span className="text-emerald-500 font-medium">Active</span></td>
                     <td className="px-6 py-4 text-muted-foreground">Just now</td>
                     <td className="px-6 py-4 text-right">
-                      <button className="text-primary hover:underline text-xs font-medium">Edit</button>
+                      <button onClick={() => toast.info('Opening user settings...')} className="text-primary hover:underline text-xs font-medium">Edit</button>
                     </td>
                   </tr>
                   <tr className="bg-card">
@@ -204,7 +226,7 @@ export const Admin = () => {
                     <td className="px-6 py-4"><span className="text-emerald-500 font-medium">Active</span></td>
                     <td className="px-6 py-4 text-muted-foreground">2 days ago</td>
                     <td className="px-6 py-4 text-right">
-                      <button className="text-primary hover:underline text-xs font-medium">Edit</button>
+                      <button onClick={() => toast.info('Opening user settings...')} className="text-primary hover:underline text-xs font-medium">Edit</button>
                     </td>
                   </tr>
                 </tbody>
@@ -225,7 +247,7 @@ export const Admin = () => {
                   <p className="text-sm text-muted-foreground">Sync unmitigated threats as Jira issues</p>
                 </div>
               </div>
-              <button className="bg-secondary text-secondary-foreground px-4 py-2 rounded-lg text-sm font-medium">Configure</button>
+              <button onClick={() => toast.info('Opening Jira configuration...')} className="bg-secondary text-secondary-foreground px-4 py-2 rounded-lg text-sm font-medium">Configure</button>
             </div>
 
             <div className="border border-border/50 rounded-2xl p-5 flex items-center justify-between">
@@ -236,7 +258,7 @@ export const Admin = () => {
                   <p className="text-sm text-muted-foreground">Create Linear issues for mitigation actions</p>
                 </div>
               </div>
-              <button className="text-primary font-medium text-sm hover:underline">Connect</button>
+              <button onClick={() => toast.success('Connecting to Linear...')} className="text-primary font-medium text-sm hover:underline">Connect</button>
             </div>
 
             <div className="border border-border/50 rounded-2xl p-5 flex items-center justify-between">
@@ -247,7 +269,7 @@ export const Admin = () => {
                   <p className="text-sm text-muted-foreground">Receive notifications on analysis completion</p>
                 </div>
               </div>
-              <button className="text-primary font-medium text-sm hover:underline">Connect</button>
+              <button onClick={() => toast.success('Connecting to Slack...')} className="text-primary font-medium text-sm hover:underline">Connect</button>
             </div>
           </div>
         )}

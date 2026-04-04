@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 
 const TabButton = ({ active, icon: Icon, label, onClick }: any) => (
   <button
@@ -206,7 +207,10 @@ export const NewModel = () => {
         {activeTab === 'diagrams' && (
           <div className="h-full flex flex-col items-center justify-center">
             <div className="max-w-md w-full text-center">
-              <div className="bg-secondary/30 border-2 border-dashed border-border rounded-3xl p-12 flex flex-col items-center justify-center hover:bg-secondary/50 transition-colors cursor-pointer">
+              <div 
+                onClick={() => toast.info('File picker opened')}
+                className="bg-secondary/30 border-2 border-dashed border-border rounded-3xl p-12 flex flex-col items-center justify-center hover:bg-secondary/50 transition-colors cursor-pointer"
+              >
                 <Upload className="h-12 w-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-1">Upload Diagrams</h3>
                 <p className="text-sm text-muted-foreground mb-4">Drag and drop architecture diagrams, or click to browse</p>
@@ -259,7 +263,10 @@ export const NewModel = () => {
                   placeholder="ghp_..."
                 />
               </div>
-              <button className="bg-secondary text-secondary-foreground px-4 py-2 rounded-xl font-medium text-sm mt-2 hover:bg-secondary/80 transition-colors">
+              <button 
+                onClick={() => toast.promise(new Promise(r => setTimeout(r, 1500)), { loading: 'Verifying connection...', success: 'Repository connected successfully!' })}
+                className="bg-secondary text-secondary-foreground px-4 py-2 rounded-xl font-medium text-sm mt-2 hover:bg-secondary/80 transition-colors"
+              >
                 Verify Connection
               </button>
             </div>

@@ -6,6 +6,7 @@ import { ModelsList } from './pages/ModelsList';
 import { Report } from './pages/Report';
 import { Admin } from './pages/Admin';
 import { ThemeProvider } from './components/theme-provider';
+import { Toaster } from 'sonner';
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           </Route>
         </Routes>
       </Router>
+      <Toaster position="bottom-right" richColors theme="system" />
     </ThemeProvider>
   );
 }

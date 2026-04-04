@@ -33,6 +33,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 
 // --- Custom C4 Node Component ---
 const C4Node = ({ data }: any) => {
@@ -214,11 +215,17 @@ export const Report = () => {
             <Sparkles className="h-4 w-4" />
             AI Copilot
           </button>
-          <button className="bg-secondary/50 text-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-secondary transition-all">
+          <button 
+            onClick={() => toast.success('Report link copied to clipboard')}
+            className="bg-secondary/50 text-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-secondary transition-all"
+          >
             <Share2 className="h-4 w-4" />
             Share
           </button>
-          <button className="bg-primary text-primary-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-primary/90 transition-all shadow-sm">
+          <button 
+            onClick={() => toast.promise(new Promise(r => setTimeout(r, 2000)), { loading: 'Generating PDF...', success: 'Report exported successfully!' })}
+            className="bg-primary text-primary-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-primary/90 transition-all shadow-sm"
+          >
             <Download className="h-4 w-4" />
             Export
           </button>
@@ -285,13 +292,22 @@ export const Report = () => {
                     </div>
                     
                     <div className="flex justify-end gap-2 border-t border-border/50 pt-4 mt-2">
-                      <button className="text-xs font-medium px-4 py-2 rounded-xl border border-border/50 hover:bg-secondary/50 flex items-center gap-1.5 transition-colors text-muted-foreground hover:text-foreground">
+                      <button 
+                        onClick={() => toast.success('Marked as false positive and removed from aggregate score.')}
+                        className="text-xs font-medium px-4 py-2 rounded-xl border border-border/50 hover:bg-secondary/50 flex items-center gap-1.5 transition-colors text-muted-foreground hover:text-foreground"
+                      >
                         <ThumbsDown className="h-3.5 w-3.5" /> False Positive
                       </button>
-                      <button className="text-xs font-medium px-4 py-2 rounded-xl border border-border/50 hover:bg-secondary/50 flex items-center gap-1.5 transition-colors text-muted-foreground hover:text-foreground">
+                      <button 
+                        onClick={() => toast.success('Risk formally accepted. Added to risk register.')}
+                        className="text-xs font-medium px-4 py-2 rounded-xl border border-border/50 hover:bg-secondary/50 flex items-center gap-1.5 transition-colors text-muted-foreground hover:text-foreground"
+                      >
                         <CheckCircle2 className="h-3.5 w-3.5" /> Accept Risk
                       </button>
-                      <button className="text-xs font-medium px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 transition-colors shadow-sm">
+                      <button 
+                        onClick={() => toast.success('New mitigation action created!')}
+                        className="text-xs font-medium px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 transition-colors shadow-sm"
+                      >
                         <ShieldAlert className="h-3.5 w-3.5" /> Create Mitigation
                       </button>
                     </div>
@@ -333,7 +349,10 @@ export const Report = () => {
             <div className="flex-1 overflow-y-auto p-6 bg-secondary/10">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold">Mitigation Action Plan</h3>
-                <button className="text-sm font-medium bg-secondary border border-border/50 px-4 py-2 rounded-xl hover:bg-secondary/80 transition-colors">
+                <button 
+                  onClick={() => toast.promise(new Promise(r => setTimeout(r, 1500)), { loading: 'Syncing to Jira...', success: '3 tickets successfully created in Jira!' })}
+                  className="text-sm font-medium bg-secondary border border-border/50 px-4 py-2 rounded-xl hover:bg-secondary/80 transition-colors"
+                >
                   Sync to Jira
                 </button>
               </div>
