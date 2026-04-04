@@ -323,7 +323,7 @@ export const Report = () => {
                 fitView
                 attributionPosition="bottom-right"
               >
-                <Background color="hsl(var(--muted-foreground))" gap={20} size={1} opacity={0.2} />
+                <Background className="opacity-20" color="hsl(var(--muted-foreground))" gap={20} size={1} />
                 <Controls className="bg-card border-border/50 fill-foreground shadow-md rounded-xl overflow-hidden" />
               </ReactFlow>
             </div>
