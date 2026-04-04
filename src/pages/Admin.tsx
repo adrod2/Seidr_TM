@@ -1,4 +1,3 @@
-character in Admin.tsx">
 import React, { useState } from 'react';
 import { 
   Users, 
