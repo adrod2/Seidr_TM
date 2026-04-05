@@ -25,21 +25,21 @@ Return ONLY a valid JSON object with this EXACT structure:
 };
 
 /**
- * STRIDE Agent: Analyzes the SRG to identify threats based on the STRIDE framework.
+ * Threat Modeling Agent: Analyzes the SRG to identify threats based on the selected framework.
  */
-export const agentSTRIDE = async (srg: SystemRepresentationGraph): Promise<Threat[]> => {
-  const hash = await hashInput(JSON.stringify(srg));
-  const cached = await getCachedResult<Threat[]>('stride', hash);
+export const agentThreatModeling = async (srg: SystemRepresentationGraph, framework: string): Promise<Threat[]> => {
+  const hash = await hashInput(`${framework}_${JSON.stringify(srg)}`);
+  const cached = await getCachedResult<Threat[]>('threatModeling', hash);
   if (cached) return cached;
 
-  const systemPrompt = `You are an expert threat modeler using the STRIDE framework. Analyze this System Representation Graph (SRG) JSON and identify potential threats. 
+  const systemPrompt = `You are an expert threat modeler using the ${framework} framework. Analyze this System Representation Graph (SRG) JSON and identify potential threats. 
 Return ONLY a valid JSON array of objects with this EXACT structure:
 [
   { 
     "id": "T-001", 
     "title": "string", 
     "description": "string", 
-    "category": "Spoofing" | "Tampering" | "Repudiation" | "Information Disclosure" | "Denial of Service" | "Elevation of Privilege", 
+    "category": "string (the threat category according to the ${framework} framework)", 
     "componentId": "string (name of the vulnerable component)", 
     "cvssScore": 8.5, 
     "severity": "Critical" | "High" | "Medium" | "Low" 
@@ -50,7 +50,7 @@ Return ONLY a valid JSON array of objects with this EXACT structure:
   
   const threats = (threatsData as Threat[]).sort((a, b) => b.cvssScore - a.cvssScore);
   
-  await setCachedResult('stride', hash, threats);
+  await setCachedResult('threatModeling', hash, threats);
   return threats;
 };
 

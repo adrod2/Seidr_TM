@@ -66,18 +66,14 @@ export const Dashboard = () => {
     if (models) {
       let totalScore = 0;
       let openThreats = 0;
-      const strideCounts: Record<string, number> = {
-        'Spoofing': 0, 'Tampering': 0, 'Repudiation': 0, 
-        'Information Disclosure': 0, 'Denial of Service': 0, 'Elevation of Privilege': 0
-      };
+      const categoryCounts: Record<string, number> = {};
 
       models.forEach(m => {
         totalScore += m.riskScore;
         m.threats?.forEach(t => {
           openThreats++;
-          if (strideCounts[t.category] !== undefined) {
-            strideCounts[t.category]++;
-          }
+          const cat = t.category || 'Unknown';
+          categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
         });
       });
 
@@ -93,13 +89,15 @@ export const Dashboard = () => {
 
       setTotalThreats(openThreats + 85); // 85 historically mitigated
 
-      const newFrameworkData = Object.keys(strideCounts).map(category => ({
-        name: category === 'Information Disclosure' ? 'Info Disclosure' : 
-              category === 'Denial of Service' ? 'DoS' : 
-              category === 'Elevation of Privilege' ? 'Elevation' : category,
-        mitigated: Math.floor(Math.random() * 15) + 5,
-        open: strideCounts[category]
-      }));
+      const newFrameworkData = Object.keys(categoryCounts)
+        .map(category => ({
+          name: category.length > 15 ? category.substring(0, 15) + '...' : category,
+          mitigated: Math.floor(Math.random() * 15) + 5,
+          open: categoryCounts[category]
+        }))
+        .sort((a, b) => b.open - a.open) // Sort by most open threats
+        .slice(0, 8); // Limit to top 8 categories so chart stays clean
+        
       setFrameworkData(newFrameworkData);
     }
   }, [models]);
@@ -177,7 +175,7 @@ export const Dashboard = () => {
         </div>
 
         <div className="bg-card p-6 rounded-3xl border border-border/50 shadow-sm">
-          <h3 className="text-lg font-bold mb-6">STRIDE Framework Coverage</h3>
+          <h3 className="text-lg font-bold mb-6">Identified Threat Categories</h3>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={frameworkData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} layout="vertical">

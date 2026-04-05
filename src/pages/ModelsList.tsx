@@ -74,9 +74,9 @@ export const ModelsList = () => {
                   </div>
                   <div className="bg-secondary/30 rounded-2xl p-3">
                     <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                      <Clock className="h-3 w-3" /> Frameworks
+                      <Clock className="h-3 w-3" /> Framework
                     </div>
-                    <div className="font-semibold text-xs mt-1">STRIDE</div>
+                    <div className="font-semibold text-xs mt-1">{model.framework || 'STRIDE'}</div>
                   </div>
                 </div>
 

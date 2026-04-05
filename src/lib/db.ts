@@ -10,6 +10,7 @@ export interface ThreatModel {
   srg: any;
   threats: any[];
   complianceGaps: any[];
+  framework?: string;
 }
 
 export interface AiConfig {

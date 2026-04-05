@@ -24,7 +24,7 @@ export interface Threat {
   id: string;
   title: string;
   description: string;
-  category: 'Spoofing' | 'Tampering' | 'Repudiation' | 'Information Disclosure' | 'Denial of Service' | 'Elevation of Privilege';
+  category: string;
   componentId: string;
   cvssScore: number;
   severity: 'Critical' | 'High' | 'Medium' | 'Low';

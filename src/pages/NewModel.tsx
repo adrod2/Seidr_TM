@@ -10,7 +10,8 @@ import {
   Sparkles,
   X,
   FileImage,
-  Paperclip
+  Paperclip,
+  Shield
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -35,7 +36,7 @@ const analysisSteps = [
   "Ingesting system context and user inputs...",
   "Parsing architecture diagrams and data flows...",
   "Identifying trust boundaries and components...",
-  "Applying STRIDE framework and heuristic rules...",
+  "Applying threat framework heuristic rules...",
   "Evaluating compliance against NIST SP 800-53...",
   "Generating final threat model report..."
 ];
@@ -44,6 +45,7 @@ export const NewModel = () => {
   const [activeTab, setActiveTab] = useState('text');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [selectedFramework, setSelectedFramework] = useState('STRIDE');
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
@@ -98,7 +100,7 @@ export const NewModel = () => {
       {
         name: modelName,
         description: payloadDesc,
-        frameworks: ['STRIDE'],
+        frameworks: [selectedFramework],
         repositoryUrl: repoUrl,
       },
       (stepNumber) => {
@@ -131,7 +133,7 @@ export const NewModel = () => {
         
         <h2 className="text-2xl font-bold mb-2">Analyzing System Architecture</h2>
         <p className="text-muted-foreground text-center mb-10">
-          Seidr AI is building your threat model. Security gates and agents are running.
+          Seidr AI is building your threat model using {selectedFramework}. Security gates and agents are running.
         </p>
 
         <div className="w-full space-y-4">
@@ -186,13 +188,27 @@ export const NewModel = () => {
           />
           <p className="text-muted-foreground text-sm">Provide system context to begin the analysis. All inputs are optional.</p>
         </div>
-        <button 
-          onClick={handleAnalyze}
-          className="bg-primary text-primary-foreground px-6 py-2.5 rounded-full font-medium flex items-center gap-2 hover:bg-primary/90 transition-all shadow-md hover:shadow-lg"
-        >
-          <Play className="h-4 w-4 fill-current" />
-          Run Analysis
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="relative flex items-center">
+             <Shield className="absolute left-3 h-4 w-4 text-muted-foreground pointer-events-none" />
+             <select
+               value={selectedFramework}
+               onChange={(e) => setSelectedFramework(e.target.value)}
+               className="bg-secondary/50 border border-border/50 rounded-full pl-9 pr-8 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none cursor-pointer hover:bg-secondary/80 transition-colors shadow-sm"
+             >
+               <option value="STRIDE">STRIDE</option>
+               <option value="PASTA">PASTA</option>
+               <option value="MAESTRO">MAESTRO</option>
+             </select>
+          </div>
+          <button 
+            onClick={handleAnalyze}
+            className="bg-primary text-primary-foreground px-6 py-2.5 rounded-full font-medium flex items-center gap-2 hover:bg-primary/90 transition-all shadow-md hover:shadow-lg"
+          >
+            <Play className="h-4 w-4 fill-current" />
+            Run Analysis
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none shrink-0">

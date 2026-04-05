@@ -1,5 +1,5 @@
 import { runSecurityPipeline } from './securityPipeline';
-import { agentNormalizer, agentSTRIDE, agentCompliance } from './agents';
+import { agentNormalizer, agentThreatModeling, agentCompliance } from './agents';
 import { db } from '../db';
 
 export interface AnalysisPayload {
@@ -43,7 +43,8 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     const srg = await agentNormalizer(sanitisedInput);
 
     onProgress(4);
-    const threats = await agentSTRIDE(srg);
+    const framework = payload.frameworks[0] || 'STRIDE';
+    const threats = await agentThreatModeling(srg, framework);
 
     onProgress(5);
     const complianceGaps = await agentCompliance(threats);
@@ -54,7 +55,7 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     
     let riskMultiplier = 1.0;
     if (payload.questionnaire?.dataClassification.includes('Highly Restricted')) riskMultiplier += 0.2;
-    if (payload.questionnaire?.authMethods.length === 0) riskMultiplier += 0.3;
+    if (payload.questionnaire?.authMethods?.length === 0) riskMultiplier += 0.3;
     
     const riskScore = Math.min(100, Math.round(avgScore * 10 * riskMultiplier));
 
@@ -70,7 +71,8 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
       status: 'Completed',
       srg,
       threats,
-      complianceGaps
+      complianceGaps,
+      framework
     });
 
     return { success: true, modelId: newModelId };
