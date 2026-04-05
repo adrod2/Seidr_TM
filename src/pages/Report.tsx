@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { ShieldAlert, GitMerge, CheckSquare, FileCheck, Download, Share2, Sparkles, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/lib/db';
 
 import { ThreatCatalogTab } from '@/components/report/ThreatCatalogTab';
 import { C4ArchitectureTab } from '@/components/report/C4ArchitectureTab';
@@ -27,73 +28,27 @@ const TabButton = ({ active, icon: Icon, label, onClick }: any) => (
 export const Report = () => {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState('threats');
-  const [isLoading, setIsLoading] = useState(true);
-  const [modelData, setModelData] = useState<any>(null);
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
 
-  useEffect(() => {
-    const fetchModel = async () => {
-      if (!id) return;
-      setIsLoading(true);
-      
-      const localDataStr = localStorage.getItem(`model_${id}`);
-      let localData = null;
-      if (localDataStr) {
-        localData = JSON.parse(localDataStr);
-      }
+  // Fetch from Dexie Local DB
+  const modelData = useLiveQuery(() => id ? db.threatModels.get(id) : undefined, [id]);
 
-      try {
-        const { data, error } = await supabase
-          .from('threat_models')
-          .select('*')
-          .eq('id', id)
-          .single();
-
-        if (error && !localData) throw error;
-        
-        if (data) {
-          setModelData({
-            name: data.name,
-            description: data.description,
-            riskScore: data.risk_score || 0,
-            date: new Date(data.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-            srg: localData?.srg || null,
-            threats: localData?.threats || null,
-            complianceGaps: localData?.complianceGaps || null
-          });
-        } else if (localData) {
-          setModelData({
-            name: localData.name,
-            description: localData.description,
-            riskScore: localData.riskScore || 0,
-            date: new Date(localData.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-            srg: localData.srg,
-            threats: localData.threats,
-            complianceGaps: localData.complianceGaps
-          });
-        }
-      } catch (err) {
-        console.warn("Failed to fetch model, using fallback UI data", err);
-        setModelData({
-          name: 'Core Payments API (Mock)',
-          description: 'This is a fallback description since the model could not be loaded from the database.',
-          riskScore: 78,
-          date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchModel();
-  }, [id]);
-
-  if (isLoading) {
+  if (modelData === undefined) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-8rem)]">
         <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
         <h2 className="text-xl font-bold">Loading Threat Model...</h2>
-        <p className="text-muted-foreground">Fetching analysis results from Seidr AI</p>
+        <p className="text-muted-foreground">Fetching analysis results from database</p>
+      </div>
+    );
+  }
+
+  if (modelData === null) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-8rem)]">
+        <ShieldAlert className="h-12 w-12 text-destructive mb-4" />
+        <h2 className="text-xl font-bold">Model Not Found</h2>
+        <p className="text-muted-foreground">The threat model you are looking for does not exist in the database.</p>
       </div>
     );
   }
@@ -105,20 +60,21 @@ export const Report = () => {
     return { label: 'Low', color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' };
   };
 
-  const riskBadge = getRiskLevel(modelData?.riskScore || 0);
+  const riskBadge = getRiskLevel(modelData.riskScore);
+  const formattedDate = new Date(modelData.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] relative">
       <div className="flex items-center justify-between mb-6">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h2 className="text-2xl font-bold">{modelData?.name}</h2>
+            <h2 className="text-2xl font-bold">{modelData.name}</h2>
             <span className={`${riskBadge.color} text-xs font-bold px-2.5 py-1 rounded-full border`}>
-              Risk: {riskBadge.label} ({modelData?.riskScore})
+              Risk: {riskBadge.label} ({modelData.riskScore})
             </span>
           </div>
           <p className="text-muted-foreground text-sm flex items-center gap-2">
-            Model ID: {id?.split('-')[0] || 'Unknown'} <span className="px-1">•</span> Generated: {modelData?.date}
+            Model ID: {modelData.id.split('-')[0]} <span className="px-1">•</span> Generated: {formattedDate}
           </p>
         </div>
         <div className="flex gap-3">
@@ -155,10 +111,10 @@ export const Report = () => {
 
       <div className="bg-card border border-border/50 rounded-3xl shadow-sm flex-1 mt-4 overflow-hidden flex">
         <div className="flex-1 flex flex-col min-w-0">
-          {activeTab === 'threats' && <ThreatCatalogTab threats={modelData?.threats} />}
-          {activeTab === 'c4' && <C4ArchitectureTab srg={modelData?.srg} />}
-          {activeTab === 'mitigations' && <MitigationsTab threats={modelData?.threats} />}
-          {activeTab === 'compliance' && <ComplianceTab gaps={modelData?.complianceGaps} />}
+          {activeTab === 'threats' && <ThreatCatalogTab threats={modelData.threats} />}
+          {activeTab === 'c4' && <C4ArchitectureTab srg={modelData.srg} />}
+          {activeTab === 'mitigations' && <MitigationsTab threats={modelData.threats} />}
+          {activeTab === 'compliance' && <ComplianceTab gaps={modelData.complianceGaps} />}
         </div>
 
         <CopilotSidebar 

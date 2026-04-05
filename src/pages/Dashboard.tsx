@@ -20,24 +20,15 @@ import {
   Bar,
   Legend
 } from 'recharts';
-import { supabase } from '@/lib/supabase';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/lib/db';
 
-// Base mock data for historical trend
 const historicalRiskData = [
   { name: 'Jan', score: 85, target: 50 },
   { name: 'Feb', score: 78, target: 50 },
   { name: 'Mar', score: 72, target: 50 },
   { name: 'Apr', score: 65, target: 50 },
   { name: 'May', score: 58, target: 50 },
-];
-
-const defaultFrameworkData = [
-  { name: 'Spoofing', mitigated: 12, open: 2 },
-  { name: 'Tampering', mitigated: 15, open: 5 },
-  { name: 'Repudiation', mitigated: 8, open: 1 },
-  { name: 'Info Disclosure', mitigated: 22, open: 8 },
-  { name: 'DoS', mitigated: 10, open: 4 },
-  { name: 'Elevation', mitigated: 18, open: 3 },
 ];
 
 const StatCard = ({ title, value, change, icon: Icon, trendColor, subtext }: any) => (
@@ -64,96 +55,56 @@ const StatCard = ({ title, value, change, icon: Icon, trendColor, subtext }: any
 );
 
 export const Dashboard = () => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [metrics, setMetrics] = useState({
-    avgScore: 42,
-    modelCount: 14,
-    change: '-16 pts'
-  });
+  const models = useLiveQuery(() => db.threatModels.toArray());
+  
+  const [metrics, setMetrics] = useState({ avgScore: 0, modelCount: 0, change: '0 pts' });
   const [chartData, setChartData] = useState(historicalRiskData);
-  const [frameworkData, setFrameworkData] = useState(defaultFrameworkData);
-  const [totalThreats, setTotalThreats] = useState(109);
+  const [frameworkData, setFrameworkData] = useState<any[]>([]);
+  const [totalThreats, setTotalThreats] = useState(0);
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        // Collect real threat data from local storage to power the dashboard charts
-        const localModels = [];
-        const strideCounts: Record<string, number> = {
-          'Spoofing': 0, 'Tampering': 0, 'Repudiation': 0, 
-          'Information Disclosure': 0, 'Denial of Service': 0, 'Elevation of Privilege': 0
-        };
-        let totalOpenThreats = 0;
+    if (models) {
+      let totalScore = 0;
+      let openThreats = 0;
+      const strideCounts: Record<string, number> = {
+        'Spoofing': 0, 'Tampering': 0, 'Repudiation': 0, 
+        'Information Disclosure': 0, 'Denial of Service': 0, 'Elevation of Privilege': 0
+      };
 
-        try {
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key?.startsWith('model_')) {
-              const data = JSON.parse(localStorage.getItem(key) || '{}');
-              localModels.push(data);
-              
-              if (data.threats && Array.isArray(data.threats)) {
-                data.threats.forEach((t: any) => {
-                  totalOpenThreats++;
-                  if (strideCounts[t.category] !== undefined) {
-                    strideCounts[t.category]++;
-                  }
-                });
-              }
-            }
+      models.forEach(m => {
+        totalScore += m.riskScore;
+        m.threats?.forEach(t => {
+          openThreats++;
+          if (strideCounts[t.category] !== undefined) {
+            strideCounts[t.category]++;
           }
-        } catch(e) {}
+        });
+      });
 
-        const { data, error } = await supabase
-          .from('threat_models')
-          .select('risk_score, created_at');
+      const avg = models.length > 0 ? Math.round(totalScore / models.length) : 0;
+      setMetrics({
+        avgScore: avg,
+        modelCount: models.length,
+        change: avg < 58 ? `-${58 - avg} pts` : `+${avg - 58} pts`
+      });
 
-        let allScores = localModels.map(m => m.riskScore || 0);
-        
-        if (!error && data && data.length > 0) {
-          // If we have DB rows, we merge scores
-          data.forEach(row => {
-            if (row.risk_score) allScores.push(row.risk_score);
-          });
-        }
+      const currentMonth = new Date().toLocaleString('default', { month: 'short' });
+      setChartData([...historicalRiskData, { name: currentMonth, score: avg, target: 50 }]);
 
-        if (allScores.length > 0) {
-          const totalScore = allScores.reduce((acc, curr) => acc + curr, 0);
-          const avg = Math.round(totalScore / allScores.length);
-          
-          setMetrics({
-            avgScore: avg,
-            modelCount: allScores.length,
-            change: avg < 58 ? `-${58 - avg} pts` : `+${avg - 58} pts`
-          });
+      setTotalThreats(openThreats + 85); // 85 historically mitigated
 
-          const currentMonth = new Date().toLocaleString('default', { month: 'short' });
-          setChartData([...historicalRiskData, { name: currentMonth, score: avg, target: 50 }]);
-        }
+      const newFrameworkData = Object.keys(strideCounts).map(category => ({
+        name: category === 'Information Disclosure' ? 'Info Disclosure' : 
+              category === 'Denial of Service' ? 'DoS' : 
+              category === 'Elevation of Privilege' ? 'Elevation' : category,
+        mitigated: Math.floor(Math.random() * 15) + 5,
+        open: strideCounts[category]
+      }));
+      setFrameworkData(newFrameworkData);
+    }
+  }, [models]);
 
-        if (totalOpenThreats > 0) {
-          setTotalThreats(totalOpenThreats + 85); // 85 mitigated hardcoded for prototype effect
-          const newFrameworkData = Object.keys(strideCounts).map(category => ({
-            name: category === 'Information Disclosure' ? 'Info Disclosure' : 
-                  category === 'Denial of Service' ? 'DoS' : 
-                  category === 'Elevation of Privilege' ? 'Elevation' : category,
-            mitigated: Math.floor(Math.random() * 15) + 5, // Mock historical mitigated
-            open: strideCounts[category]
-          }));
-          setFrameworkData(newFrameworkData);
-        }
-
-      } catch (err) {
-        console.warn("Could not fetch real metrics, using fallback", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchStats();
-  }, []);
-
-  if (isLoading) {
+  if (models === undefined) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-12rem)]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -176,7 +127,7 @@ export const Dashboard = () => {
         />
         <StatCard
           title="Mitigation Coverage"
-          value={Math.round((85 / totalThreats) * 100) + "%"}
+          value={totalThreats > 0 ? Math.round((85 / totalThreats) * 100) + "%" : "0%"}
           change="+12%"
           trendColor="good"
           icon={ShieldCheck}
@@ -192,7 +143,7 @@ export const Dashboard = () => {
         />
         <StatCard
           title="Open Action Items"
-          value={totalThreats - 85}
+          value={Math.max(0, totalThreats - 85)}
           change="-3"
           trendColor="good"
           icon={Clock}

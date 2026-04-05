@@ -1,6 +1,6 @@
-import { supabase } from '../supabase';
 import { runSecurityPipeline } from './securityPipeline';
 import { agentNormalizer, agentSTRIDE, agentCompliance } from './agents';
+import { db } from '../db';
 
 export interface AnalysisPayload {
   name: string;
@@ -58,35 +58,20 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     
     const riskScore = Math.min(100, Math.round(avgScore * 10 * riskMultiplier));
 
-    let newModelId = `m-${Math.random().toString(36).substr(2, 6)}`;
+    const newModelId = `m-${Math.random().toString(36).substr(2, 6)}`;
 
-    try {
-      const { data, error } = await supabase.from('threat_models').insert({
-        name: payload.name || 'Untitled Threat Model',
-        description: sanitisedInput,
-        status: 'Completed',
-        risk_score: riskScore
-      }).select().single();
-      
-      if (!error && data) {
-        newModelId = data.id;
-      }
-    } catch (dbErr) {
-      console.warn("Could not save to Supabase. Using local storage fallback.");
-    } finally {
-      // Always cache to local storage to guarantee artifacts are available for the UI
-      localStorage.setItem(`model_${newModelId}`, JSON.stringify({
-        id: newModelId,
-        name: payload.name || 'Untitled Threat Model',
-        description: sanitisedInput,
-        riskScore: riskScore,
-        date: new Date().toISOString(),
-        status: 'Completed',
-        srg,
-        threats,
-        complianceGaps
-      }));
-    }
+    // Save to Local Dexie DB
+    await db.threatModels.put({
+      id: newModelId,
+      name: payload.name || 'Untitled Threat Model',
+      description: sanitisedInput,
+      riskScore: riskScore,
+      date: new Date().toISOString(),
+      status: 'Completed',
+      srg,
+      threats,
+      complianceGaps
+    });
 
     return { success: true, modelId: newModelId };
   } catch (error: any) {

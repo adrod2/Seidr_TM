@@ -1,32 +1,34 @@
 import React, { useState } from 'react';
 import { Loader2, UploadCloud, Settings2, FileText, Trash2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/lib/db';
 
 export const SystemContextTab = () => {
   const [isUploading, setIsUploading] = useState(false);
-  const [documents, setDocuments] = useState([
-    { id: 1, name: 'Cloud Security Standard 2026.pdf', chunks: 142 }
-  ]);
+  const documents = useLiveQuery(() => db.documents.toArray());
 
   const handleFileUpload = () => {
     setIsUploading(true);
     toast.info('Analyzing document and generating embeddings...');
     
-    setTimeout(() => {
+    setTimeout(async () => {
       setIsUploading(false);
-      setDocuments(prev => [...prev, { 
+      await db.documents.add({ 
         id: Date.now(), 
         name: `Architecture_Guidelines_v${Math.floor(Math.random() * 10)}.pdf`, 
         chunks: Math.floor(Math.random() * 200) + 50 
-      }]);
+      });
       toast.success('Document successfully indexed into vector database!');
     }, 2500);
   };
 
-  const removeDocument = (id: number) => {
-    setDocuments(prev => prev.filter(d => d.id !== id));
+  const removeDocument = async (id: number) => {
+    await db.documents.delete(id);
     toast.success('Document removed from index');
   };
+
+  if (documents === undefined) return <div className="p-4 flex justify-center"><Loader2 className="animate-spin h-6 w-6 text-primary" /></div>;
 
   return (
     <div className="space-y-8 max-w-4xl">

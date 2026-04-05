@@ -1,32 +1,33 @@
 import React, { useState, useRef } from 'react';
 import { Loader2, Upload, Plus } from 'lucide-react';
 import { toast } from 'sonner';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/lib/db';
 
 export const RiskContextTab = () => {
   const riskFileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingRisks, setIsUploadingRisks] = useState(false);
-  const [businessRisks, setBusinessRisks] = useState([
-    { id: 'BR-01', desc: 'Ransomware attack causing >24h downtime', appetite: 'Conservative', status: 'Unmitigated' },
-    { id: 'BR-02', desc: 'Customer PII breach via web interface', appetite: 'Minimal', status: 'Mitigated' }
-  ]);
+  const businessRisks = useLiveQuery(() => db.businessRisks.toArray());
 
   const handleRiskBulkUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setIsUploadingRisks(true);
       toast.info('Parsing CSV and importing business risks...');
       
-      setTimeout(() => {
+      setTimeout(async () => {
         setIsUploadingRisks(false);
-        setBusinessRisks(prev => [
-          ...prev,
-          { id: `BR-0${prev.length + 1}`, desc: 'Supply chain compromise via third-party dependency', appetite: 'Moderate', status: 'Unmitigated' },
-          { id: `BR-0${prev.length + 2}`, desc: 'Insider threat data exfiltration', appetite: 'Minimal', status: 'Unmitigated' }
+        const count = businessRisks?.length || 0;
+        await db.businessRisks.bulkAdd([
+          { id: `BR-0${count + 1}`, desc: 'Supply chain compromise via third-party dependency', appetite: 'Moderate', status: 'Unmitigated' },
+          { id: `BR-0${count + 2}`, desc: 'Insider threat data exfiltration', appetite: 'Minimal', status: 'Unmitigated' }
         ]);
         toast.success('Successfully imported 2 business risks from CSV.');
         if (riskFileInputRef.current) riskFileInputRef.current.value = '';
       }, 2000);
     }
   };
+
+  if (businessRisks === undefined) return <div className="p-4 flex justify-center"><Loader2 className="animate-spin h-6 w-6 text-primary" /></div>;
 
   return (
     <div className="space-y-8 max-w-4xl">

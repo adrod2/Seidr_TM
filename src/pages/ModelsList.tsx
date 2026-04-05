@@ -1,87 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, ShieldAlert, ArrowRight, Activity, Clock, Loader2 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
-
-const fallbackModels = [
-  {
-    id: 'm-1234',
-    name: 'Core Payments API',
-    date: '2026-04-12',
-    riskScore: 78,
-    status: 'Completed',
-    frameworks: ['STRIDE', 'PASTA'],
-    threats: 42
-  }
-];
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/lib/db';
 
 export const ModelsList = () => {
-  const [models, setModels] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchModels = async () => {
-      try {
-        let localModels: any[] = [];
-        try {
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key?.startsWith('model_')) {
-              const data = JSON.parse(localStorage.getItem(key) || '{}');
-              localModels.push({
-                id: data.id,
-                name: data.name,
-                date: new Date(data.date).toISOString().split('T')[0],
-                riskScore: data.riskScore || 0,
-                status: data.status,
-                frameworks: ['STRIDE'],
-                threats: data.threats ? data.threats.length : 0
-              });
-            }
-          }
-        } catch(e) {}
-
-        const { data, error } = await supabase
-          .from('threat_models')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        let dbModels: any[] = [];
-        if (!error && data) {
-          dbModels = data.map(dbModel => ({
-            id: dbModel.id,
-            name: dbModel.name,
-            date: new Date(dbModel.created_at).toISOString().split('T')[0],
-            riskScore: dbModel.risk_score || 0,
-            status: dbModel.status,
-            frameworks: ['STRIDE'],
-            threats: Math.floor(Math.random() * 20) + 5
-          }));
-        }
-
-        // Deduplicate and combine (prefer local models if they have the artifacts)
-        const combined = [...localModels];
-        dbModels.forEach(dbm => {
-          if (!combined.find(c => c.id === dbm.id)) {
-            combined.push(dbm);
-          }
-        });
-
-        if (combined.length > 0) {
-          setModels(combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-        } else {
-          setModels(fallbackModels);
-        }
-      } catch (err) {
-        console.warn("Failed to fetch models", err);
-        setModels(fallbackModels);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchModels();
-  }, []);
+  const models = useLiveQuery(() => db.threatModels.orderBy('date').reverse().toArray());
 
   return (
     <div className="space-y-6">
@@ -98,9 +22,18 @@ export const ModelsList = () => {
         </Link>
       </div>
 
-      {isLoading ? (
+      {models === undefined ? (
         <div className="flex justify-center items-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : models.length === 0 ? (
+        <div className="bg-card border border-border/50 rounded-3xl p-12 text-center shadow-sm">
+          <ShieldAlert className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-xl font-bold mb-2">No Threat Models Found</h3>
+          <p className="text-muted-foreground mb-6">You haven't generated any threat models yet.</p>
+          <Link to="/models/new" className="bg-primary text-primary-foreground px-6 py-3 rounded-xl font-medium inline-block hover:bg-primary/90 transition-all">
+            Generate Your First Model
+          </Link>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -127,7 +60,7 @@ export const ModelsList = () => {
                 <h3 className="text-lg font-bold mb-1 truncate">{model.name}</h3>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground mb-6">
                   <Calendar className="h-3.5 w-3.5" />
-                  <span>{model.date}</span>
+                  <span>{new Date(model.date).toISOString().split('T')[0]}</span>
                   <span className="px-1">•</span>
                   <span className="truncate w-16" title={model.id}>{model.id.split('-')[0]}...</span>
                 </div>
@@ -137,13 +70,13 @@ export const ModelsList = () => {
                     <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
                       <Activity className="h-3 w-3" /> Threats
                     </div>
-                    <div className="font-semibold">{model.threats} Identified</div>
+                    <div className="font-semibold">{model.threats?.length || 0} Identified</div>
                   </div>
                   <div className="bg-secondary/30 rounded-2xl p-3">
                     <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
                       <Clock className="h-3 w-3" /> Frameworks
                     </div>
-                    <div className="font-semibold text-xs mt-1">{model.frameworks.join(', ')}</div>
+                    <div className="font-semibold text-xs mt-1">STRIDE</div>
                   </div>
                 </div>
 

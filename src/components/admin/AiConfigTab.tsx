@@ -1,20 +1,32 @@
-import React, { useState } from 'react';
-import { Key } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Key, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/lib/db';
 
 export const AiConfigTab = () => {
-  const [aiConfig, setAiConfig] = useState({
-    provider: localStorage.getItem('seidr_ai_provider') || 'openai',
-    apiKey: localStorage.getItem('seidr_ai_key') || '',
-    endpoint: localStorage.getItem('seidr_ai_endpoint') || 'http://localhost:11434'
-  });
+  const configFromDb = useLiveQuery(() => db.aiConfig.get('default'));
+  const [aiConfig, setAiConfig] = useState({ provider: 'openai', apiKey: '', endpoint: 'http://localhost:11434' });
 
-  const saveAiConfig = () => {
-    localStorage.setItem('seidr_ai_provider', aiConfig.provider);
-    if (aiConfig.apiKey) localStorage.setItem('seidr_ai_key', aiConfig.apiKey);
-    if (aiConfig.endpoint) localStorage.setItem('seidr_ai_endpoint', aiConfig.endpoint);
+  useEffect(() => {
+    if (configFromDb) {
+      setAiConfig({
+        provider: configFromDb.provider,
+        apiKey: configFromDb.apiKey,
+        endpoint: configFromDb.endpoint
+      });
+    }
+  }, [configFromDb]);
+
+  const saveAiConfig = async () => {
+    await db.aiConfig.put({
+      id: 'default',
+      ...aiConfig
+    });
     toast.success('AI Agent configuration saved successfully!');
   };
+
+  if (configFromDb === undefined) return <div className="p-4 flex justify-center"><Loader2 className="animate-spin h-6 w-6 text-primary" /></div>;
 
   return (
     <div className="max-w-3xl space-y-8">
@@ -61,8 +73,7 @@ export const AiConfigTab = () => {
                 placeholder={`Enter your ${aiConfig.provider} API key...`} 
               />
               <p className="text-xs text-muted-foreground mt-3">
-                Keys are stored locally in your browser's storage and transmitted directly to the provider. 
-                They are never stored on Seidr servers.
+                Keys are stored locally in your browser's database and transmitted directly to the provider.
               </p>
             </div>
           ) : (
@@ -77,7 +88,7 @@ export const AiConfigTab = () => {
               />
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mt-4">
                 <p className="text-xs font-medium text-amber-600 dark:text-amber-500">
-                  <strong>Note:</strong> Ensure your local Ollama instance has CORS enabled and is actively running a supported model (e.g., Llama 3 or Mistral).
+                  <strong>Note:</strong> Ensure your local Ollama instance has CORS enabled and is actively running a supported model.
                 </p>
               </div>
             </div>

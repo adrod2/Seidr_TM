@@ -1,35 +1,37 @@
 import React, { useState } from 'react';
-import { Search, Mail } from 'lucide-react';
+import { Search, Mail, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/lib/db';
 
 export const UserManagementTab = () => {
-  const [users, setUsers] = useState([
-    { id: 1, name: 'Jane Doe', email: 'jane.doe@example.com', role: 'Org Admin', status: 'Active', lastActive: 'Just now' },
-    { id: 2, name: 'John Smith', email: 'john.smith@example.com', role: 'Security Engineer', status: 'Active', lastActive: '2 hrs ago' },
-    { id: 3, name: 'Alice Jones', email: 'alice.jones@example.com', role: 'Developer', status: 'Pending', lastActive: 'Never' }
-  ]);
+  const users = useLiveQuery(() => db.users.toArray());
+  const [isInviting, setIsInviting] = useState(false);
 
-  const handleInviteUser = () => {
-    toast.promise(new Promise(r => setTimeout(r, 1000)), {
-      loading: 'Sending invitation...',
-      success: () => {
-        setUsers(prev => [...prev, {
-          id: Date.now(),
-          name: 'New User',
-          email: `new.user${prev.length}@example.com`,
-          role: 'Viewer',
-          status: 'Pending',
-          lastActive: 'Never'
-        }]);
-        return 'Invitation sent successfully!';
-      }
-    });
+  const handleInviteUser = async () => {
+    setIsInviting(true);
+    toast.info('Sending invitation...');
+    
+    setTimeout(async () => {
+      await db.users.add({
+        id: Date.now(),
+        name: 'New User',
+        email: `new.user${users?.length || 0}@example.com`,
+        role: 'Viewer',
+        status: 'Pending',
+        lastActive: 'Never'
+      });
+      setIsInviting(false);
+      toast.success('Invitation sent successfully!');
+    }, 1000);
   };
 
-  const removeUser = (id: number) => {
-    setUsers(prev => prev.filter(u => u.id !== id));
+  const removeUser = async (id: number) => {
+    await db.users.delete(id);
     toast.success('User removed from organization.');
   };
+
+  if (users === undefined) return <div className="p-4 flex justify-center"><Loader2 className="animate-spin h-6 w-6 text-primary" /></div>;
 
   return (
     <div className="max-w-5xl">
@@ -44,9 +46,11 @@ export const UserManagementTab = () => {
         </div>
         <button 
           onClick={handleInviteUser}
-          className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-primary/90 transition-all shadow-sm"
+          disabled={isInviting}
+          className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-primary/90 transition-all shadow-sm disabled:opacity-50"
         >
-          <Mail className="h-4 w-4" /> Invite User
+          {isInviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} 
+          Invite User
         </button>
       </div>
 
