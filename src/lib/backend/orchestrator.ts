@@ -20,7 +20,6 @@ export interface AnalysisPayload {
 
 export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress: (step: number) => void) => {
   try {
-    // 1. Combine all context into a single structured string for the security pipeline and agents
     const fullContext = `
       System Description: ${payload.description || 'Not provided'}
       Deployment Model: ${payload.questionnaire?.deployment.join(', ') || 'Unknown'}
@@ -30,44 +29,35 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
       Additional Docs [${payload.documentation?.title || 'Untitled'}]: ${payload.documentation?.content || 'None'}
     `.trim();
 
-    // 2. Security Gates
-    onProgress(1); // "Ingesting system context and user inputs..."
+    onProgress(1);
     const { sanitisedInput, piiRedactedCount } = runSecurityPipeline(fullContext);
 
     if (piiRedactedCount > 0) {
       console.log(`[Audit] Redacted ${piiRedactedCount} PII elements from input`);
     }
 
-    // 3. Mock Parsing (Diagrams/Git)
     await new Promise(resolve => setTimeout(resolve, 1000));
-    onProgress(2); // "Parsing architecture diagrams and data flows..."
+    onProgress(2);
 
-    // 4. Agent 1: Normalizer (Creates System Representation Graph)
-    onProgress(3); // "Identifying trust boundaries and components..."
+    onProgress(3);
     const srg = await agentNormalizer(sanitisedInput);
 
-    // 5. Agent 2: STRIDE Analyzer
-    onProgress(4); // "Applying STRIDE framework and heuristic rules..."
+    onProgress(4);
     const threats = await agentSTRIDE(srg);
 
-    // 6. Agent 6: Compliance Mapper
-    onProgress(5); // "Evaluating compliance against NIST SP 800-53..."
+    onProgress(5);
     const complianceGaps = await agentCompliance(threats);
 
-    // 7. DB Storage & Finalization
-    onProgress(6); // "Generating final threat model report..."
+    onProgress(6);
     
-    // Calculate aggregate risk score
     const avgScore = threats.reduce((acc, t) => acc + t.cvssScore, 0) / (threats.length || 1);
     
-    // Boost risk score slightly if highly classified data or no auth is selected in questionnaire
     let riskMultiplier = 1.0;
     if (payload.questionnaire?.dataClassification.includes('Highly Restricted')) riskMultiplier += 0.2;
     if (payload.questionnaire?.authMethods.length === 0) riskMultiplier += 0.3;
     
     const riskScore = Math.min(100, Math.round(avgScore * 10 * riskMultiplier));
 
-    // Fallback ID if Supabase insert fails
     let newModelId = `m-${Math.random().toString(36).substr(2, 6)}`;
 
     try {
@@ -82,7 +72,20 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
         newModelId = data.id;
       }
     } catch (dbErr) {
-      console.warn("Could not save to Supabase. Using mock ID.", dbErr);
+      console.warn("Could not save to Supabase. Using local storage fallback.");
+    } finally {
+      // Always cache to local storage to guarantee artifacts are available for the UI
+      localStorage.setItem(`model_${newModelId}`, JSON.stringify({
+        id: newModelId,
+        name: payload.name || 'Untitled Threat Model',
+        description: sanitisedInput,
+        riskScore: riskScore,
+        date: new Date().toISOString(),
+        status: 'Completed',
+        srg,
+        threats,
+        complianceGaps
+      }));
     }
 
     return { success: true, modelId: newModelId };

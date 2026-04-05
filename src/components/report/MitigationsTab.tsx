@@ -1,13 +1,22 @@
 import React from 'react';
 import { toast } from 'sonner';
 
-export const MitigationsTab = () => {
+export const MitigationsTab = ({ threats }: { threats?: any[] }) => {
+  const actions = threats?.map((t, idx) => ({
+    id: `ACT-${idx + 100}`,
+    threatId: t.id,
+    title: `Remediate: ${t.title}`,
+    effort: t.severity === 'Critical' ? 'High' : 'Medium',
+    status: idx === 0 ? 'In Progress' : 'Open',
+    controls: ['AC-1', 'SI-2']
+  })) || [];
+
   return (
     <div className="flex-1 overflow-y-auto p-6 bg-secondary/10 h-full">
       <div className="flex justify-between items-center mb-6">
         <h3 className="text-lg font-bold">Mitigation Action Plan</h3>
         <button 
-          onClick={() => toast.promise(new Promise(r => setTimeout(r, 1500)), { loading: 'Syncing to Jira...', success: '3 tickets successfully created in Jira!' })}
+          onClick={() => toast.promise(new Promise(r => setTimeout(r, 1500)), { loading: 'Syncing to Jira...', success: `${actions.length} tickets successfully created in Jira!` })}
           className="text-sm font-medium bg-secondary border border-border/50 px-4 py-2 rounded-xl hover:bg-secondary/80 transition-colors"
         >
           Sync to Jira
@@ -18,11 +27,7 @@ export const MitigationsTab = () => {
           <div key={status} className="flex flex-col bg-card/50 border border-border/50 rounded-3xl p-4">
             <h4 className="font-bold text-sm mb-4 text-muted-foreground uppercase tracking-wider px-2">{status}</h4>
             <div className="flex-1 space-y-4">
-              {[
-                { id: 'ACT-001', threatId: 'T-001', title: 'Implement JWT Validation Middleware', effort: 'Medium', status: 'Open', controls: ['AC-2', 'IA-2'] },
-                { id: 'ACT-002', threatId: 'T-002', title: 'Migrate to Parameterized Queries ORM', effort: 'High', status: 'In Progress', controls: ['SI-10'] },
-                { id: 'ACT-003', threatId: 'T-003', title: 'Enforce TLS 1.3 for Internal Traffic', effort: 'Low', status: 'Done', controls: ['SC-8'] },
-              ].filter(a => a.status === status).map(action => (
+              {actions.filter(a => a.status === status).map(action => (
                 <div key={action.id} className="bg-background border border-border/50 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow cursor-grab">
                   <div className="flex justify-between items-start mb-2">
                     <span className="text-[10px] font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">{action.id}</span>
@@ -44,6 +49,11 @@ export const MitigationsTab = () => {
                   </div>
                 </div>
               ))}
+              {actions.filter(a => a.status === status).length === 0 && (
+                <div className="text-center p-4 border border-dashed border-border/50 rounded-xl text-xs text-muted-foreground">
+                  No tasks
+                </div>
+              )}
             </div>
           </div>
         ))}

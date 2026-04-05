@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { Calendar, ShieldAlert, ArrowRight, Activity, Clock, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-// Fallback static data if DB is empty or fails
 const fallbackModels = [
   {
     id: 'm-1234',
@@ -13,15 +12,6 @@ const fallbackModels = [
     status: 'Completed',
     frameworks: ['STRIDE', 'PASTA'],
     threats: 42
-  },
-  {
-    id: 'm-5678',
-    name: 'Customer Portal V2',
-    date: '2026-04-10',
-    riskScore: 45,
-    status: 'Completed',
-    frameworks: ['STRIDE'],
-    threats: 18
   }
 ];
 
@@ -32,30 +22,58 @@ export const ModelsList = () => {
   useEffect(() => {
     const fetchModels = async () => {
       try {
+        let localModels: any[] = [];
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key?.startsWith('model_')) {
+              const data = JSON.parse(localStorage.getItem(key) || '{}');
+              localModels.push({
+                id: data.id,
+                name: data.name,
+                date: new Date(data.date).toISOString().split('T')[0],
+                riskScore: data.riskScore || 0,
+                status: data.status,
+                frameworks: ['STRIDE'],
+                threats: data.threats ? data.threats.length : 0
+              });
+            }
+          }
+        } catch(e) {}
+
         const { data, error } = await supabase
           .from('threat_models')
           .select('*')
           .order('created_at', { ascending: false });
 
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          // Map DB schema to UI schema
-          const mappedData = data.map(dbModel => ({
+        let dbModels: any[] = [];
+        if (!error && data) {
+          dbModels = data.map(dbModel => ({
             id: dbModel.id,
             name: dbModel.name,
             date: new Date(dbModel.created_at).toISOString().split('T')[0],
             riskScore: dbModel.risk_score || 0,
             status: dbModel.status,
-            frameworks: ['STRIDE'], // Hardcoded for prototype
-            threats: Math.floor(Math.random() * 20) + 5 // Mocking threat count for now
+            frameworks: ['STRIDE'],
+            threats: Math.floor(Math.random() * 20) + 5
           }));
-          setModels(mappedData);
+        }
+
+        // Deduplicate and combine (prefer local models if they have the artifacts)
+        const combined = [...localModels];
+        dbModels.forEach(dbm => {
+          if (!combined.find(c => c.id === dbm.id)) {
+            combined.push(dbm);
+          }
+        });
+
+        if (combined.length > 0) {
+          setModels(combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
         } else {
           setModels(fallbackModels);
         }
       } catch (err) {
-        console.warn("Failed to fetch from Supabase, using fallback data", err);
+        console.warn("Failed to fetch models", err);
         setModels(fallbackModels);
       } finally {
         setIsLoading(false);

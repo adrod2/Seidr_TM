@@ -4,12 +4,11 @@ import { ShieldAlert, GitMerge, CheckSquare, FileCheck, Download, Share2, Sparkl
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 
-// Updated: Relative imports pointing to the root components folder
-import { ThreatCatalogTab } from '../components/ThreatCatalogTab';
-import { C4ArchitectureTab } from '../components/C4ArchitectureTab';
-import { MitigationsTab } from '../components/MitigationsTab';
-import { ComplianceTab } from '../components/ComplianceTab';
-import { CopilotSidebar } from '../components/CopilotSidebar';
+import { ThreatCatalogTab } from '@/components/report/ThreatCatalogTab';
+import { C4ArchitectureTab } from '@/components/report/C4ArchitectureTab';
+import { MitigationsTab } from '@/components/report/MitigationsTab';
+import { ComplianceTab } from '@/components/report/ComplianceTab';
+import { CopilotSidebar } from '@/components/report/CopilotSidebar';
 
 const TabButton = ({ active, icon: Icon, label, onClick }: any) => (
   <button
@@ -36,6 +35,14 @@ export const Report = () => {
     const fetchModel = async () => {
       if (!id) return;
       setIsLoading(true);
+      
+      // Try to get complete generated artifact payload from local storage first
+      const localDataStr = localStorage.getItem(`model_${id}`);
+      let localData = null;
+      if (localDataStr) {
+        localData = JSON.parse(localDataStr);
+      }
+
       try {
         const { data, error } = await supabase
           .from('threat_models')
@@ -43,14 +50,28 @@ export const Report = () => {
           .eq('id', id)
           .single();
 
-        if (error) throw error;
+        if (error && !localData) throw error;
         
+        // Merge DB data with local artifacts if DB doesn't have JSONB artifacts yet
         if (data) {
           setModelData({
             name: data.name,
             description: data.description,
             riskScore: data.risk_score || 0,
-            date: new Date(data.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+            date: new Date(data.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+            srg: localData?.srg || null,
+            threats: localData?.threats || null,
+            complianceGaps: localData?.complianceGaps || null
+          });
+        } else if (localData) {
+          setModelData({
+            name: localData.name,
+            description: localData.description,
+            riskScore: localData.riskScore || 0,
+            date: new Date(localData.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+            srg: localData.srg,
+            threats: localData.threats,
+            complianceGaps: localData.complianceGaps
           });
         }
       } catch (err) {
@@ -135,15 +156,13 @@ export const Report = () => {
       </div>
 
       <div className="bg-card border border-border/50 rounded-3xl shadow-sm flex-1 mt-4 overflow-hidden flex">
-        {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0">
-          {activeTab === 'threats' && <ThreatCatalogTab />}
-          {activeTab === 'c4' && <C4ArchitectureTab />}
-          {activeTab === 'mitigations' && <MitigationsTab />}
-          {activeTab === 'compliance' && <ComplianceTab />}
+          {activeTab === 'threats' && <ThreatCatalogTab threats={modelData?.threats} />}
+          {activeTab === 'c4' && <C4ArchitectureTab srg={modelData?.srg} />}
+          {activeTab === 'mitigations' && <MitigationsTab threats={modelData?.threats} />}
+          {activeTab === 'compliance' && <ComplianceTab gaps={modelData?.complianceGaps} />}
         </div>
 
-        {/* AI Copilot Slide-over Panel */}
         <CopilotSidebar 
           isOpen={isCopilotOpen} 
           onClose={() => setIsCopilotOpen(false)} 
