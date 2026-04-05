@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   FileText, 
   HelpCircle, 
@@ -9,7 +9,9 @@ import {
   Play,
   CheckCircle2,
   Loader2,
-  Sparkles
+  Sparkles,
+  X,
+  FileImage
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -47,6 +49,7 @@ export const NewModel = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- Form State ---
   const [modelName, setModelName] = useState('New System Analysis');
@@ -57,19 +60,38 @@ export const NewModel = () => {
   const [repoUrl, setRepoUrl] = useState('');
   const [docTitle, setDocTitle] = useState('');
   const [docContent, setDocContent] = useState('');
+  const [uploadedDiagrams, setUploadedDiagrams] = useState<File[]>([]);
 
   const toggleArrayItem = (setter: React.Dispatch<React.SetStateAction<string[]>>, item: string) => {
     setter(prev => prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const newFiles = Array.from(e.target.files);
+      setUploadedDiagrams(prev => [...prev, ...newFiles]);
+      toast.success(`${newFiles.length} diagram(s) added to context.`);
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setUploadedDiagrams(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
     setCurrentStep(0);
 
+    // Provide default context if user provided strictly nothing
+    let payloadDesc = description;
+    if (!description && uploadedDiagrams.length === 0 && !repoUrl && !docContent) {
+      payloadDesc = "Standard web application running on AWS with React frontend and Node backend using a PostgreSQL database.";
+    }
+
     const result = await startAnalysisPipeline(
       {
         name: modelName,
-        description: description,
+        description: payloadDesc,
         frameworks: ['STRIDE'],
         questionnaire: {
           deployment,
@@ -273,16 +295,54 @@ export const NewModel = () => {
         )}
 
         {activeTab === 'diagrams' && (
-          <div className="h-full flex flex-col items-center justify-center">
-            <div className="max-w-md w-full text-center">
+          <div className="h-full flex flex-col">
+            <h3 className="text-lg font-semibold mb-4">Architecture Diagrams</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full pb-6">
               <div 
-                onClick={() => toast.success('Architecture diagram attached to context payload.')}
+                onClick={() => fileInputRef.current?.click()}
                 className="bg-secondary/30 border-2 border-dashed border-border rounded-3xl p-12 flex flex-col items-center justify-center hover:bg-secondary/50 transition-colors cursor-pointer"
               >
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  onChange={handleFileUpload} 
+                  multiple 
+                  accept="image/png, image/jpeg, application/pdf, .vsdx, .xml"
+                  className="hidden" 
+                />
                 <Upload className="h-12 w-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-1">Upload Diagrams</h3>
-                <p className="text-sm text-muted-foreground mb-4">Drag and drop architecture diagrams, or click to browse</p>
-                <p className="text-xs text-muted-foreground">Supported: PNG, JPG, SVG, PDF, Visio (.vsdx), draw.io XML (Max 50MB)</p>
+                <p className="text-sm text-muted-foreground mb-4 text-center">Drag and drop architecture diagrams, or click to browse</p>
+                <p className="text-xs text-muted-foreground text-center">Supported: PNG, JPG, SVG, PDF, Visio (.vsdx), draw.io XML</p>
+              </div>
+
+              <div className="bg-secondary/10 border border-border/50 rounded-3xl p-6 overflow-y-auto">
+                <h4 className="font-bold text-sm mb-4">Attached Context ({uploadedDiagrams.length})</h4>
+                {uploadedDiagrams.length === 0 ? (
+                  <div className="flex items-center justify-center h-40 text-sm text-muted-foreground border border-dashed border-border/50 rounded-2xl">
+                    No diagrams uploaded yet
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {uploadedDiagrams.map((file, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 bg-card border border-border/50 rounded-xl">
+                        <div className="flex items-center gap-3 truncate">
+                          <FileImage className="h-5 w-5 text-primary flex-shrink-0" />
+                          <div className="truncate">
+                            <p className="text-sm font-medium truncate">{file.name}</p>
+                            <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => removeFile(idx)}
+                          className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

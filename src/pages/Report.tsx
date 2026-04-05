@@ -36,7 +36,6 @@ export const Report = () => {
       if (!id) return;
       setIsLoading(true);
       
-      // Try to get complete generated artifact payload from local storage first
       const localDataStr = localStorage.getItem(`model_${id}`);
       let localData = null;
       if (localDataStr) {
@@ -52,7 +51,6 @@ export const Report = () => {
 
         if (error && !localData) throw error;
         
-        // Merge DB data with local artifacts if DB doesn't have JSONB artifacts yet
         if (data) {
           setModelData({
             name: data.name,
@@ -166,7 +164,7 @@ export const Report = () => {
         <CopilotSidebar 
           isOpen={isCopilotOpen} 
           onClose={() => setIsCopilotOpen(false)} 
-          modelName={modelData?.name} 
+          modelData={modelData} 
         />
       </div>
     </div>
