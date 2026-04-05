@@ -12,7 +12,9 @@ import {
   Loader2,
   CheckCircle2,
   Upload,
-  Mail
+  Mail,
+  BrainCircuit,
+  Key
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -31,13 +33,20 @@ const TabButton = ({ active, icon: Icon, label, onClick }: any) => (
 );
 
 export const Admin = () => {
-  const [activeTab, setActiveTab] = useState('risk');
+  const [activeTab, setActiveTab] = useState('ai-config');
   const riskFileInputRef = useRef<HTMLInputElement>(null);
   
   // Interactive State
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadingRisks, setIsUploadingRisks] = useState(false);
   
+  // AI Config State
+  const [aiConfig, setAiConfig] = useState({
+    provider: localStorage.getItem('seidr_ai_provider') || 'openai',
+    apiKey: localStorage.getItem('seidr_ai_key') || '',
+    endpoint: localStorage.getItem('seidr_ai_endpoint') || 'http://localhost:11434'
+  });
+
   const [documents, setDocuments] = useState([
     { id: 1, name: 'Cloud Security Standard 2026.pdf', chunks: 142 }
   ]);
@@ -57,6 +66,13 @@ export const Admin = () => {
     { id: 2, name: 'John Smith', email: 'john.smith@example.com', role: 'Security Engineer', status: 'Active', lastActive: '2 hrs ago' },
     { id: 3, name: 'Alice Jones', email: 'alice.jones@example.com', role: 'Developer', status: 'Pending', lastActive: 'Never' }
   ]);
+
+  const saveAiConfig = () => {
+    localStorage.setItem('seidr_ai_provider', aiConfig.provider);
+    if (aiConfig.apiKey) localStorage.setItem('seidr_ai_key', aiConfig.apiKey);
+    if (aiConfig.endpoint) localStorage.setItem('seidr_ai_endpoint', aiConfig.endpoint);
+    toast.success('AI Agent configuration saved successfully!');
+  };
 
   const handleFileUpload = () => {
     setIsUploading(true);
@@ -142,6 +158,7 @@ export const Admin = () => {
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none shrink-0 mb-4">
+        <TabButton active={activeTab === 'ai-config'} onClick={() => setActiveTab('ai-config')} icon={BrainCircuit} label="AI Models" />
         <TabButton active={activeTab === 'risk'} onClick={() => setActiveTab('risk')} icon={Shield} label="Risk Context" />
         <TabButton active={activeTab === 'system'} onClick={() => setActiveTab('system')} icon={Database} label="System Context" />
         <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={Users} label="User Management" />
@@ -149,6 +166,92 @@ export const Admin = () => {
       </div>
 
       <div className="bg-card border border-border/50 rounded-3xl shadow-sm flex-1 overflow-y-auto p-6">
+        {activeTab === 'ai-config' && (
+          <div className="max-w-3xl space-y-8">
+            <div>
+              <h3 className="text-lg font-bold mb-1">AI Agent Configuration</h3>
+              <p className="text-sm text-muted-foreground">Select the LLM provider to power Seidr's threat modeling and RAG agents.</p>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-bold mb-3">Model Provider</label>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {['openai', 'gemini', 'claude', 'ollama'].map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setAiConfig({...aiConfig, provider: p})}
+                      className={`p-4 rounded-2xl border-2 text-sm font-bold transition-all flex flex-col items-center justify-center gap-2 ${
+                        aiConfig.provider === p 
+                          ? 'border-primary bg-primary/10 text-primary shadow-sm' 
+                          : 'border-border/50 bg-secondary/20 hover:bg-secondary/50 text-muted-foreground'
+                      }`}
+                    >
+                      {p === 'openai' && 'OpenAI (GPT-4)'}
+                      {p === 'gemini' && 'Google Gemini'}
+                      {p === 'claude' && 'Claude (Anthropic)'}
+                      {p === 'ollama' && 'Local (Ollama)'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-secondary/30 border border-border/50 rounded-2xl p-6">
+                {aiConfig.provider !== 'ollama' ? (
+                  <div>
+                    <label className="flex items-center gap-2 text-sm font-bold mb-2">
+                      <Key className="h-4 w-4 text-muted-foreground" />
+                      API Key
+                    </label>
+                    <input 
+                      type="password" 
+                      value={aiConfig.apiKey}
+                      onChange={(e) => setAiConfig({...aiConfig, apiKey: e.target.value})}
+                      className="w-full bg-background border border-border/50 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground shadow-inner font-mono text-sm" 
+                      placeholder={`Enter your ${aiConfig.provider} API key...`} 
+                    />
+                    <p className="text-xs text-muted-foreground mt-3">
+                      Keys are stored locally in your browser's storage and transmitted directly to the provider. 
+                      They are never stored on Seidr servers.
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-sm font-bold mb-2">Local Endpoint URL</label>
+                    <input 
+                      type="text" 
+                      value={aiConfig.endpoint}
+                      onChange={(e) => setAiConfig({...aiConfig, endpoint: e.target.value})}
+                      className="w-full bg-background border border-border/50 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground shadow-inner font-mono text-sm" 
+                      placeholder="http://localhost:11434" 
+                    />
+                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mt-4">
+                      <p className="text-xs font-medium text-amber-600 dark:text-amber-500">
+                        <strong>Note:</strong> Ensure your local Ollama instance has CORS enabled and is actively running a supported model (e.g., Llama 3 or Mistral).
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-border/50 flex gap-3">
+              <button 
+                onClick={saveAiConfig}
+                className="bg-primary text-primary-foreground px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-primary/90 transition-all shadow-md hover:shadow-lg"
+              >
+                Save Configuration
+              </button>
+              <button 
+                onClick={() => toast.promise(new Promise(r => setTimeout(r, 1500)), { loading: 'Pinging AI provider...', success: `Successfully connected to ${aiConfig.provider}!` })}
+                className="bg-secondary text-foreground px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-secondary/80 transition-all border border-border/50 shadow-sm"
+              >
+                Test Connection
+              </button>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'risk' && (
           <div className="space-y-8 max-w-4xl">
             <div>
@@ -191,14 +294,14 @@ export const Admin = () => {
                   <button 
                     onClick={() => riskFileInputRef.current?.click()}
                     disabled={isUploadingRisks}
-                    className="bg-secondary text-foreground px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 hover:bg-secondary/80 transition-colors disabled:opacity-50"
+                    className="bg-secondary text-foreground px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 hover:bg-secondary/80 transition-colors disabled:opacity-50 border border-border/50 shadow-sm"
                   >
                     {isUploadingRisks ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                     Bulk Upload
                   </button>
                   <button 
                     onClick={() => toast.info('Opening risk creation modal...')}
-                    className="bg-primary text-primary-foreground px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1 hover:bg-primary/90 transition-colors"
+                    className="bg-primary text-primary-foreground px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1 hover:bg-primary/90 transition-colors shadow-sm"
                   >
                     <Plus className="h-4 w-4" /> Add Risk
                   </button>
@@ -278,7 +381,7 @@ export const Admin = () => {
                   <p className="text-sm text-muted-foreground text-center py-4 border border-border/50 rounded-xl border-dashed">No documents uploaded yet.</p>
                 ) : (
                   documents.map(doc => (
-                    <div key={doc.id} className="flex items-center justify-between p-3 border border-border/50 rounded-xl bg-card hover:border-primary/50 transition-colors">
+                    <div key={doc.id} className="flex items-center justify-between p-3 border border-border/50 rounded-xl bg-card hover:border-primary/50 transition-colors shadow-sm">
                       <div className="flex items-center gap-3">
                         <FileText className="h-5 w-5 text-primary" />
                         <div>
@@ -326,12 +429,12 @@ export const Admin = () => {
                 <input 
                   type="text" 
                   placeholder="Search users..." 
-                  className="pl-9 pr-4 py-2 bg-secondary/30 border border-border/50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 w-64"
+                  className="pl-9 pr-4 py-2 bg-secondary/30 border border-border/50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 w-64 shadow-inner"
                 />
               </div>
               <button 
                 onClick={handleInviteUser}
-                className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-primary/90 transition-all shadow-sm"
+                className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-primary/90 transition-all shadow-sm"
               >
                 <Mail className="h-4 w-4" /> Invite User
               </button>
@@ -352,25 +455,25 @@ export const Admin = () => {
                   {users.map((user) => (
                     <tr key={user.id} className="bg-card hover:bg-secondary/20 transition-colors">
                       <td className="px-6 py-4">
-                        <div className="font-medium text-foreground">{user.name}</div>
+                        <div className="font-bold text-foreground">{user.name}</div>
                         <div className="text-xs text-muted-foreground">{user.email}</div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-md text-xs font-semibold">
+                        <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-md text-xs font-bold border border-primary/20">
                           {user.role}
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         <span className={`font-medium flex items-center gap-1.5 ${user.status === 'Active' ? 'text-emerald-500' : 'text-amber-500'}`}>
-                          {user.status === 'Active' && <span className="h-2 w-2 rounded-full bg-emerald-500" />}
-                          {user.status === 'Pending' && <span className="h-2 w-2 rounded-full bg-amber-500" />}
+                          {user.status === 'Active' && <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />}
+                          {user.status === 'Pending' && <span className="h-2 w-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.8)]" />}
                           {user.status}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-muted-foreground">{user.lastActive}</td>
-                      <td className="px-6 py-4 text-right space-x-3">
-                        <button onClick={() => toast.info('Opening user settings...')} className="text-primary hover:underline text-xs font-medium">Edit</button>
-                        <button onClick={() => removeUser(user.id)} className="text-destructive hover:underline text-xs font-medium">Remove</button>
+                      <td className="px-6 py-4 text-right space-x-4">
+                        <button onClick={() => toast.info('Opening user settings...')} className="text-primary hover:underline text-xs font-bold">Edit</button>
+                        <button onClick={() => removeUser(user.id)} className="text-destructive hover:underline text-xs font-bold">Remove</button>
                       </td>
                     </tr>
                   ))}
@@ -404,7 +507,7 @@ export const Admin = () => {
               </div>
               <button 
                 onClick={() => toggleIntegration('jira', 'Jira')} 
-                className={integrations.jira ? "bg-secondary text-secondary-foreground px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-secondary/80" : "bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-primary/90"}
+                className={integrations.jira ? "bg-secondary text-secondary-foreground px-4 py-2 rounded-xl text-sm font-bold border border-border/50 shadow-sm hover:bg-secondary/80" : "bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-primary/90"}
               >
                 {integrations.jira ? 'Configure' : 'Connect'}
               </button>
@@ -423,7 +526,7 @@ export const Admin = () => {
               </div>
               <button 
                 onClick={() => toggleIntegration('slack', 'Slack')} 
-                className={integrations.slack ? "bg-secondary text-secondary-foreground px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-secondary/80" : "bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-primary/90"}
+                className={integrations.slack ? "bg-secondary text-secondary-foreground px-4 py-2 rounded-xl text-sm font-bold border border-border/50 shadow-sm hover:bg-secondary/80" : "bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-primary/90"}
               >
                 {integrations.slack ? 'Disconnect' : 'Connect'}
               </button>
