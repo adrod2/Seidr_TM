@@ -1,17 +1,16 @@
 import React, { useState, useRef } from 'react';
 import { 
   FileText, 
-  HelpCircle, 
   Image as ImageIcon, 
   Github, 
-  Files,
   Upload,
   Play,
   CheckCircle2,
   Loader2,
   Sparkles,
   X,
-  FileImage
+  FileImage,
+  Paperclip
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -41,30 +40,20 @@ const analysisSteps = [
   "Generating final threat model report..."
 ];
 
-const DEPLOYMENT_OPTIONS = ['AWS', 'GCP', 'Azure', 'On-Premise', 'Hybrid'];
-const AUTH_OPTIONS = ['OIDC/OAuth2', 'SAML', 'JWT', 'Session', 'API Keys', 'MFA Enforced'];
-
 export const NewModel = () => {
   const [activeTab, setActiveTab] = useState('text');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
 
   // --- Form State ---
   const [modelName, setModelName] = useState('New System Analysis');
   const [description, setDescription] = useState('');
-  const [deployment, setDeployment] = useState<string[]>([]);
-  const [authMethods, setAuthMethods] = useState<string[]>([]);
-  const [dataClassification, setDataClassification] = useState('');
   const [repoUrl, setRepoUrl] = useState('');
-  const [docTitle, setDocTitle] = useState('');
-  const [docContent, setDocContent] = useState('');
   const [uploadedDiagrams, setUploadedDiagrams] = useState<File[]>([]);
-
-  const toggleArrayItem = (setter: React.Dispatch<React.SetStateAction<string[]>>, item: string) => {
-    setter(prev => prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]);
-  };
+  const [uploadedDocs, setUploadedDocs] = useState<File[]>([]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -74,8 +63,20 @@ export const NewModel = () => {
     }
   };
 
-  const removeFile = (index: number) => {
+  const handleDocUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const newFiles = Array.from(e.target.files);
+      setUploadedDocs(prev => [...prev, ...newFiles]);
+      toast.success(`${newFiles.length} document(s) added to context.`);
+    }
+  };
+
+  const removeDiagram = (index: number) => {
     setUploadedDiagrams(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeDoc = (index: number) => {
+    setUploadedDocs(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleAnalyze = async () => {
@@ -84,8 +85,13 @@ export const NewModel = () => {
 
     // Provide default context if user provided strictly nothing
     let payloadDesc = description;
-    if (!description && uploadedDiagrams.length === 0 && !repoUrl && !docContent) {
+    if (!description && uploadedDiagrams.length === 0 && !repoUrl && uploadedDocs.length === 0) {
       payloadDesc = "Standard web application running on AWS with React frontend and Node backend using a PostgreSQL database.";
+    }
+    
+    // Append attached docs metadata to payload description for context
+    if (uploadedDocs.length > 0) {
+      payloadDesc += `\n\nAttached Context Documents: ${uploadedDocs.map(d => d.name).join(', ')}`;
     }
 
     const result = await startAnalysisPipeline(
@@ -93,16 +99,7 @@ export const NewModel = () => {
         name: modelName,
         description: payloadDesc,
         frameworks: ['STRIDE'],
-        questionnaire: {
-          deployment,
-          authMethods,
-          dataClassification
-        },
         repositoryUrl: repoUrl,
-        documentation: {
-          title: docTitle,
-          content: docContent
-        }
       },
       (stepNumber) => {
         setCurrentStep(stepNumber);
@@ -200,96 +197,69 @@ export const NewModel = () => {
 
       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none shrink-0">
         <TabButton active={activeTab === 'text'} onClick={() => setActiveTab('text')} icon={FileText} label="System Description" />
-        <TabButton active={activeTab === 'questionnaire'} onClick={() => setActiveTab('questionnaire')} icon={HelpCircle} label="Questionnaire" />
         <TabButton active={activeTab === 'diagrams'} onClick={() => setActiveTab('diagrams')} icon={ImageIcon} label="Diagrams" />
         <TabButton active={activeTab === 'git'} onClick={() => setActiveTab('git')} icon={Github} label="Repositories" />
-        <TabButton active={activeTab === 'docs'} onClick={() => setActiveTab('docs')} icon={Files} label="Documentation" />
       </div>
 
       <div className="bg-card border border-border/50 rounded-3xl shadow-sm flex-1 mt-4 p-6 overflow-y-auto">
         {activeTab === 'text' && (
-          <div className="h-full flex flex-col">
-            <h3 className="text-lg font-semibold mb-4">Textual System Description</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Describe your system architecture, data flows, trust boundaries, and primary use cases in natural language.
-            </p>
-            <textarea 
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="flex-1 bg-secondary/30 border border-border/50 rounded-2xl p-4 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none w-full"
-              placeholder="e.g. The system is a multi-tenant SaaS application running on AWS. It uses a React frontend, a Node.js API backend, and a PostgreSQL database. Authentication is handled via Auth0..."
-            ></textarea>
-            <p className="text-xs text-muted-foreground mt-4">
-              * Note: The 3-gate security pipeline is active. Try pasting an email address to see PII redaction in action, or type "ignore previous instructions" to trigger the prompt injection shield!
-            </p>
-          </div>
-        )}
+          <div className="h-full flex flex-col gap-6">
+            <div className="flex-1 flex flex-col">
+              <h3 className="text-lg font-semibold mb-2">Textual System Description</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Describe your system architecture, data flows, trust boundaries, and primary use cases in natural language.
+              </p>
+              <textarea 
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="flex-1 min-h-[200px] bg-secondary/30 border border-border/50 rounded-2xl p-4 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none w-full shadow-inner"
+                placeholder="e.g. The system is a multi-tenant SaaS application running on AWS. It uses a React frontend, a Node.js API backend, and a PostgreSQL database. Authentication is handled via Auth0..."
+              ></textarea>
+              <p className="text-xs text-muted-foreground mt-4">
+                * Note: The 3-gate security pipeline is active. Try pasting an email address to see PII redaction in action, or type "ignore previous instructions" to trigger the prompt injection shield!
+              </p>
+            </div>
 
-        {activeTab === 'questionnaire' && (
-          <div className="max-w-3xl space-y-8">
-            <h3 className="text-lg font-semibold mb-2">Guided Questionnaire</h3>
-            
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium mb-3">Deployment Model</label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {DEPLOYMENT_OPTIONS.map(opt => (
-                    <div 
-                      key={opt} 
-                      onClick={() => toggleArrayItem(setDeployment, opt)}
-                      className={`border rounded-xl p-3 flex items-center gap-2 cursor-pointer transition-colors ${
-                        deployment.includes(opt) ? 'bg-primary/10 border-primary text-primary' : 'border-border/50 hover:bg-secondary/50'
-                      }`}
-                    >
-                      <input 
-                        type="checkbox" 
-                        checked={deployment.includes(opt)}
-                        readOnly
-                        className="rounded text-primary pointer-events-none" 
-                      />
-                      <span className="text-sm font-medium">{opt}</span>
+            <div className="border-t border-border/50 pt-6">
+              <div className="flex items-center justify-between mb-4">
+                 <div>
+                   <h3 className="text-sm font-semibold">Supporting Documents</h3>
+                   <p className="text-xs text-muted-foreground">Upload policies, architectural decision records, or logs.</p>
+                 </div>
+                 <button 
+                   onClick={() => docInputRef.current?.click()}
+                   className="text-sm bg-secondary text-foreground border border-border/50 px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-secondary/80 transition-colors shadow-sm"
+                 >
+                   <Paperclip className="h-4 w-4" /> Attach Files
+                 </button>
+                 <input 
+                   type="file" 
+                   ref={docInputRef} 
+                   onChange={handleDocUpload} 
+                   multiple 
+                   accept=".doc,.docx,.pdf,.xls,.xlsx,.csv,.txt"
+                   className="hidden" 
+                 />
+              </div>
+              
+              {uploadedDocs.length > 0 ? (
+                <div className="flex flex-wrap gap-3">
+                  {uploadedDocs.map((file, idx) => (
+                    <div key={idx} className="flex items-center gap-2 bg-background border border-border/50 px-3 py-2 rounded-xl text-sm shadow-sm">
+                      <FileText className="h-4 w-4 text-primary" />
+                      <span className="max-w-[150px] truncate font-medium">{file.name}</span>
+                      <span className="text-[10px] text-muted-foreground mr-1">{(file.size / 1024).toFixed(0)}kb</span>
+                      <button onClick={() => removeDoc(idx)} className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 p-1 rounded-md transition-colors ml-1">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   ))}
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-3">Authentication Methods</label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {AUTH_OPTIONS.map(opt => (
-                    <div 
-                      key={opt} 
-                      onClick={() => toggleArrayItem(setAuthMethods, opt)}
-                      className={`border rounded-xl p-3 flex items-center gap-2 cursor-pointer transition-colors ${
-                        authMethods.includes(opt) ? 'bg-primary/10 border-primary text-primary' : 'border-border/50 hover:bg-secondary/50'
-                      }`}
-                    >
-                      <input 
-                        type="checkbox" 
-                        checked={authMethods.includes(opt)}
-                        readOnly
-                        className="rounded text-primary pointer-events-none" 
-                      />
-                      <span className="text-sm font-medium">{opt}</span>
-                    </div>
-                  ))}
+              ) : (
+                <div className="text-center p-6 border border-dashed border-border/50 rounded-2xl bg-secondary/10">
+                  <p className="text-sm text-muted-foreground">No documents attached. Supported formats: .doc, .pdf, .xls, .csv, .txt</p>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-3">Data Classification</label>
-                <select 
-                  value={dataClassification}
-                  onChange={(e) => setDataClassification(e.target.value)}
-                  className="w-full bg-secondary/30 border border-border/50 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                >
-                  <option value="">Select highest data classification level</option>
-                  <option value="Public / Unclassified">Public / Unclassified</option>
-                  <option value="Internal / Confidential">Internal / Confidential</option>
-                  <option value="PII / PHI / Regulated">PII / PHI / Regulated</option>
-                  <option value="Highly Restricted / Secrets">Highly Restricted / Secrets</option>
-                </select>
-              </div>
+              )}
             </div>
           </div>
         )}
@@ -334,7 +304,7 @@ export const NewModel = () => {
                           </div>
                         </div>
                         <button 
-                          onClick={() => removeFile(idx)}
+                          onClick={() => removeDiagram(idx)}
                           className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
                         >
                           <X className="h-4 w-4" />
@@ -367,32 +337,11 @@ export const NewModel = () => {
               </div>
               <button 
                 onClick={() => toast.promise(new Promise(r => setTimeout(r, 1500)), { loading: 'Verifying connection...', success: 'Repository connected and ready for scan!' })}
-                className="bg-secondary text-secondary-foreground px-4 py-2 rounded-xl font-medium text-sm mt-2 hover:bg-secondary/80 transition-colors"
+                className="bg-secondary text-secondary-foreground px-4 py-2 rounded-xl font-medium text-sm mt-2 hover:bg-secondary/80 transition-colors shadow-sm"
               >
                 Verify Connection
               </button>
             </div>
-          </div>
-        )}
-
-        {activeTab === 'docs' && (
-          <div className="h-full flex flex-col">
-            <h3 className="text-lg font-semibold mb-4">Documentation Pastes</h3>
-            <div className="flex gap-4 mb-4">
-              <input 
-                type="text" 
-                value={docTitle}
-                onChange={(e) => setDocTitle(e.target.value)}
-                className="flex-1 bg-secondary/30 border border-border/50 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm" 
-                placeholder="Document Title (e.g. ADR-001: Auth Strategy)" 
-              />
-            </div>
-            <textarea 
-              value={docContent}
-              onChange={(e) => setDocContent(e.target.value)}
-              className="flex-1 bg-secondary/30 border border-border/50 rounded-xl p-4 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none w-full font-mono text-sm" 
-              placeholder="Paste document content here..."
-            ></textarea>
           </div>
         )}
       </div>
