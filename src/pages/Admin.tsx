@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Users, 
   Shield, 
@@ -10,7 +10,9 @@ import {
   FileText,
   Trash2,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  Upload,
+  Mail
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -30,17 +32,31 @@ const TabButton = ({ active, icon: Icon, label, onClick }: any) => (
 
 export const Admin = () => {
   const [activeTab, setActiveTab] = useState('risk');
+  const riskFileInputRef = useRef<HTMLInputElement>(null);
   
   // Interactive State
   const [isUploading, setIsUploading] = useState(false);
+  const [isUploadingRisks, setIsUploadingRisks] = useState(false);
+  
   const [documents, setDocuments] = useState([
     { id: 1, name: 'Cloud Security Standard 2026.pdf', chunks: 142 }
   ]);
+  
   const [integrations, setIntegrations] = useState({
     jira: true,
-    linear: false,
     slack: false
   });
+
+  const [businessRisks, setBusinessRisks] = useState([
+    { id: 'BR-01', desc: 'Ransomware attack causing >24h downtime', appetite: 'Conservative', status: 'Unmitigated' },
+    { id: 'BR-02', desc: 'Customer PII breach via web interface', appetite: 'Minimal', status: 'Mitigated' }
+  ]);
+
+  const [users, setUsers] = useState([
+    { id: 1, name: 'Jane Doe', email: 'jane.doe@example.com', role: 'Org Admin', status: 'Active', lastActive: 'Just now' },
+    { id: 2, name: 'John Smith', email: 'john.smith@example.com', role: 'Security Engineer', status: 'Active', lastActive: '2 hrs ago' },
+    { id: 3, name: 'Alice Jones', email: 'alice.jones@example.com', role: 'Developer', status: 'Pending', lastActive: 'Never' }
+  ]);
 
   const handleFileUpload = () => {
     setIsUploading(true);
@@ -55,6 +71,24 @@ export const Admin = () => {
       }]);
       toast.success('Document successfully indexed into vector database!');
     }, 2500);
+  };
+
+  const handleRiskBulkUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setIsUploadingRisks(true);
+      toast.info('Parsing CSV and importing business risks...');
+      
+      setTimeout(() => {
+        setIsUploadingRisks(false);
+        setBusinessRisks(prev => [
+          ...prev,
+          { id: `BR-0${prev.length + 1}`, desc: 'Supply chain compromise via third-party dependency', appetite: 'Moderate', status: 'Unmitigated' },
+          { id: `BR-0${prev.length + 2}`, desc: 'Insider threat data exfiltration', appetite: 'Minimal', status: 'Unmitigated' }
+        ]);
+        toast.success('Successfully imported 2 business risks from CSV.');
+        if (riskFileInputRef.current) riskFileInputRef.current.value = '';
+      }, 2000);
+    }
   };
 
   const removeDocument = (id: number) => {
@@ -76,6 +110,28 @@ export const Admin = () => {
       setIntegrations(prev => ({ ...prev, [key]: false }));
       toast.info(`${name} disconnected.`);
     }
+  };
+
+  const handleInviteUser = () => {
+    toast.promise(new Promise(r => setTimeout(r, 1000)), {
+      loading: 'Sending invitation...',
+      success: () => {
+        setUsers(prev => [...prev, {
+          id: Date.now(),
+          name: 'New User',
+          email: `new.user${prev.length}@example.com`,
+          role: 'Viewer',
+          status: 'Pending',
+          lastActive: 'Never'
+        }]);
+        return 'Invitation sent successfully!';
+      }
+    });
+  };
+
+  const removeUser = (id: number) => {
+    setUsers(prev => prev.filter(u => u.id !== id));
+    toast.success('User removed from organization.');
   };
 
   return (
@@ -124,12 +180,29 @@ export const Admin = () => {
                   <h3 className="text-lg font-bold">Business Risk Register</h3>
                   <p className="text-sm text-muted-foreground">Threats aligning with unmitigated business risks receive a score boost.</p>
                 </div>
-                <button 
-                  onClick={() => toast.info('Opening risk creation modal...')}
-                  className="bg-secondary text-secondary-foreground px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1"
-                >
-                  <Plus className="h-4 w-4" /> Add Risk
-                </button>
+                <div className="flex gap-2">
+                  <input 
+                    type="file" 
+                    accept=".csv,.xlsx" 
+                    className="hidden" 
+                    ref={riskFileInputRef}
+                    onChange={handleRiskBulkUpload}
+                  />
+                  <button 
+                    onClick={() => riskFileInputRef.current?.click()}
+                    disabled={isUploadingRisks}
+                    className="bg-secondary text-foreground px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 hover:bg-secondary/80 transition-colors disabled:opacity-50"
+                  >
+                    {isUploadingRisks ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    Bulk Upload
+                  </button>
+                  <button 
+                    onClick={() => toast.info('Opening risk creation modal...')}
+                    className="bg-primary text-primary-foreground px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1 hover:bg-primary/90 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" /> Add Risk
+                  </button>
+                </div>
               </div>
               <div className="border border-border/50 rounded-2xl overflow-hidden">
                 <table className="w-full text-sm text-left">
@@ -142,18 +215,25 @@ export const Admin = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/50">
-                    <tr className="bg-card">
-                      <td className="px-4 py-3 font-mono">BR-01</td>
-                      <td className="px-4 py-3">Ransomware attack causing {'>'}24h downtime</td>
-                      <td className="px-4 py-3">Conservative</td>
-                      <td className="px-4 py-3"><span className="text-destructive font-medium">Unmitigated</span></td>
-                    </tr>
-                    <tr className="bg-card">
-                      <td className="px-4 py-3 font-mono">BR-02</td>
-                      <td className="px-4 py-3">Customer PII breach via web interface</td>
-                      <td className="px-4 py-3">Minimal</td>
-                      <td className="px-4 py-3"><span className="text-emerald-500 font-medium">Mitigated</span></td>
-                    </tr>
+                    {businessRisks.map((risk) => (
+                      <tr key={risk.id} className="bg-card hover:bg-secondary/20 transition-colors">
+                        <td className="px-4 py-3 font-mono">{risk.id}</td>
+                        <td className="px-4 py-3">{risk.desc}</td>
+                        <td className="px-4 py-3">{risk.appetite}</td>
+                        <td className="px-4 py-3">
+                          <span className={`font-medium ${risk.status === 'Mitigated' ? 'text-emerald-500' : 'text-destructive'}`}>
+                            {risk.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {businessRisks.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
+                          No business risks recorded.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -239,8 +319,7 @@ export const Admin = () => {
         )}
 
         {activeTab === 'users' && (
-          <div>
-            {/* ... Existing User Tab Code ... */}
+          <div className="max-w-5xl">
             <div className="flex justify-between items-center mb-6">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -251,14 +330,14 @@ export const Admin = () => {
                 />
               </div>
               <button 
-                onClick={() => toast.success('Invitation link sent successfully!')}
-                className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-primary/90 transition-all"
+                onClick={handleInviteUser}
+                className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-primary/90 transition-all shadow-sm"
               >
-                <Plus className="h-4 w-4" /> Invite User
+                <Mail className="h-4 w-4" /> Invite User
               </button>
             </div>
 
-            <div className="border border-border/50 rounded-2xl overflow-hidden">
+            <div className="border border-border/50 rounded-2xl overflow-hidden shadow-sm">
               <table className="w-full text-sm text-left">
                 <thead className="bg-secondary/50 text-muted-foreground text-xs uppercase">
                   <tr>
@@ -270,18 +349,38 @@ export const Admin = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
-                  <tr className="bg-card">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-foreground">Jane Doe</div>
-                      <div className="text-xs text-muted-foreground">jane.doe@example.com</div>
-                    </td>
-                    <td className="px-6 py-4"><span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-semibold">Org Admin</span></td>
-                    <td className="px-6 py-4"><span className="text-emerald-500 font-medium">Active</span></td>
-                    <td className="px-6 py-4 text-muted-foreground">Just now</td>
-                    <td className="px-6 py-4 text-right">
-                      <button onClick={() => toast.info('Opening user settings...')} className="text-primary hover:underline text-xs font-medium">Edit</button>
-                    </td>
-                  </tr>
+                  {users.map((user) => (
+                    <tr key={user.id} className="bg-card hover:bg-secondary/20 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-foreground">{user.name}</div>
+                        <div className="text-xs text-muted-foreground">{user.email}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-md text-xs font-semibold">
+                          {user.role}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`font-medium flex items-center gap-1.5 ${user.status === 'Active' ? 'text-emerald-500' : 'text-amber-500'}`}>
+                          {user.status === 'Active' && <span className="h-2 w-2 rounded-full bg-emerald-500" />}
+                          {user.status === 'Pending' && <span className="h-2 w-2 rounded-full bg-amber-500" />}
+                          {user.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-muted-foreground">{user.lastActive}</td>
+                      <td className="px-6 py-4 text-right space-x-3">
+                        <button onClick={() => toast.info('Opening user settings...')} className="text-primary hover:underline text-xs font-medium">Edit</button>
+                        <button onClick={() => removeUser(user.id)} className="text-destructive hover:underline text-xs font-medium">Remove</button>
+                      </td>
+                    </tr>
+                  ))}
+                  {users.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">
+                        No users found.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -292,9 +391,9 @@ export const Admin = () => {
           <div className="max-w-4xl space-y-6">
             <h3 className="text-lg font-bold mb-2">Connected Services</h3>
             
-            <div className={`border rounded-2xl p-5 flex items-center justify-between transition-colors ${integrations.jira ? 'border-primary bg-primary/5' : 'border-border/50'}`}>
+            <div className={`border rounded-2xl p-5 flex items-center justify-between transition-colors shadow-sm ${integrations.jira ? 'border-primary bg-primary/5' : 'border-border/50 bg-card'}`}>
               <div className="flex items-center gap-4">
-                <div className="h-10 w-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">J</div>
+                <div className="h-10 w-10 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold shadow-inner">J</div>
                 <div>
                   <h4 className="font-bold text-base flex items-center gap-2">
                     Jira Software
@@ -305,34 +404,15 @@ export const Admin = () => {
               </div>
               <button 
                 onClick={() => toggleIntegration('jira', 'Jira')} 
-                className={integrations.jira ? "bg-secondary text-secondary-foreground px-4 py-2 rounded-lg text-sm font-medium" : "text-primary font-medium text-sm hover:underline"}
+                className={integrations.jira ? "bg-secondary text-secondary-foreground px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-secondary/80" : "bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-primary/90"}
               >
                 {integrations.jira ? 'Configure' : 'Connect'}
               </button>
             </div>
 
-            <div className={`border rounded-2xl p-5 flex items-center justify-between transition-colors ${integrations.linear ? 'border-primary bg-primary/5' : 'border-border/50'}`}>
+            <div className={`border rounded-2xl p-5 flex items-center justify-between transition-colors shadow-sm ${integrations.slack ? 'border-primary bg-primary/5' : 'border-border/50 bg-card'}`}>
               <div className="flex items-center gap-4">
-                <div className="h-10 w-10 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">L</div>
-                <div>
-                  <h4 className="font-bold text-base flex items-center gap-2">
-                    Linear
-                    {integrations.linear && <CheckCircle2 className="h-4 w-4 text-primary" />}
-                  </h4>
-                  <p className="text-sm text-muted-foreground">Create Linear issues for mitigation actions</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => toggleIntegration('linear', 'Linear')} 
-                className={integrations.linear ? "bg-secondary text-secondary-foreground px-4 py-2 rounded-lg text-sm font-medium" : "text-primary font-medium text-sm hover:underline"}
-              >
-                {integrations.linear ? 'Disconnect' : 'Connect'}
-              </button>
-            </div>
-
-            <div className={`border rounded-2xl p-5 flex items-center justify-between transition-colors ${integrations.slack ? 'border-primary bg-primary/5' : 'border-border/50'}`}>
-              <div className="flex items-center gap-4">
-                <div className="h-10 w-10 bg-purple-600 rounded-lg flex items-center justify-center text-white font-bold">S</div>
+                <div className="h-10 w-10 bg-purple-600 rounded-xl flex items-center justify-center text-white font-bold shadow-inner">S</div>
                 <div>
                   <h4 className="font-bold text-base flex items-center gap-2">
                     Slack
@@ -343,7 +423,7 @@ export const Admin = () => {
               </div>
               <button 
                 onClick={() => toggleIntegration('slack', 'Slack')} 
-                className={integrations.slack ? "bg-secondary text-secondary-foreground px-4 py-2 rounded-lg text-sm font-medium" : "text-primary font-medium text-sm hover:underline"}
+                className={integrations.slack ? "bg-secondary text-secondary-foreground px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-secondary/80" : "bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-primary/90"}
               >
                 {integrations.slack ? 'Disconnect' : 'Connect'}
               </button>
