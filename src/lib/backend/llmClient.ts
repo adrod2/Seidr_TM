@@ -77,7 +77,7 @@ export const callLLM = async (systemPrompt: string, userPrompt: string) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'llama3', // Adjust based on the model you have loaded locally
+          model: 'qwen3.5', // Updated to use qwen3.5 as requested
           system: systemPrompt,
           prompt: userPrompt,
           format: 'json',

@@ -88,7 +88,7 @@ export const AiConfigTab = () => {
               />
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mt-4">
                 <p className="text-xs font-medium text-amber-600 dark:text-amber-500">
-                  <strong>Note:</strong> Ensure your local Ollama instance has CORS enabled and is actively running a supported model.
+                  <strong>Note:</strong> Ensure your local Ollama instance has CORS enabled and is actively running the <strong>qwen3.5</strong> model.
                 </p>
               </div>
             </div>
