@@ -65,16 +65,8 @@ db.version(1).stores({
   integrations: 'id'
 });
 
-// Seed default data if empty
+// Seed default config (empty state for clean agentic run)
 db.on('populate', async () => {
-  await db.users.bulkAdd([
-    { id: 1, name: 'Jane Doe', email: 'jane.doe@example.com', role: 'Org Admin', status: 'Active', lastActive: 'Just now' },
-    { id: 2, name: 'John Smith', email: 'john.smith@example.com', role: 'Security Engineer', status: 'Active', lastActive: '2 hrs ago' }
-  ]);
-  await db.businessRisks.bulkAdd([
-    { id: 'BR-01', desc: 'Ransomware attack causing >24h downtime', appetite: 'Conservative', status: 'Unmitigated' },
-    { id: 'BR-02', desc: 'Customer PII breach via web interface', appetite: 'Minimal', status: 'Mitigated' }
-  ]);
   await db.aiConfig.add({
     id: 'default', provider: 'openai', apiKey: '', endpoint: 'http://localhost:11434'
   });
