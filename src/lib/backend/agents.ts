@@ -11,9 +11,15 @@ export const agentC4Architect = async (sanitisedInput: string): Promise<SystemRe
   if (cached) return cached;
 
   const systemPrompt = `You are an expert software architect specializing in the C4 model. 
-Given the comprehensive system context, identify the architectural components and data flows to build Level 1 (System Context) and Level 2 (Container) diagrams.
-- Level 1 (L1) should include external users (Person), external systems, and the main system itself.
-- Level 2 (L2) should break down the main system into internal containers (Web App, API, Database, etc.) and include the external users/systems interacting with them.
+Given the comprehensive system context, extract MAXIMUM details to build Level 1 (System Context), Level 2 (Container), and Level 3 (Component) diagrams.
+
+- Level 1 (L1): External users (Person), external systems, and the main system itself.
+- Level 2 (L2): Break down the main system into internal containers (Web App, API Gateway, Microservices, Databases).
+- Level 3 (L3): Break down the containers into specific components (Controllers, Services, Repositories, Security Modules).
+
+Rules for 'c4Level': 
+- Use 'Global' for Persons/External Systems that appear across all levels.
+- Use 'L1', 'L2', or 'L3' appropriately for the systems, containers, and components.
 
 Return ONLY a valid JSON object with this EXACT structure:
 {
@@ -22,13 +28,13 @@ Return ONLY a valid JSON object with this EXACT structure:
       "id": "c1", 
       "name": "string", 
       "type": "Process" | "DataStore" | "ExternalEntity" | "DataFlow",
-      "c4Type": "Person" | "System" | "Container" | "Database",
-      "c4Level": "L1" | "L2" | "Both",
-      "description": "string" 
+      "c4Type": "Person" | "System" | "Container" | "Database" | "Component",
+      "c4Level": "L1" | "L2" | "L3" | "Global",
+      "description": "highly detailed description based on input" 
     } 
   ],
   "edges": [ 
-    { "id": "e1", "sourceId": "c1", "targetId": "c2", "protocol": "HTTPS", "label": "description of the action (e.g., 'Sends data to')" } 
+    { "id": "e1", "sourceId": "c1", "targetId": "c2", "protocol": "HTTPS", "label": "description of the action" } 
   ],
   "trustBoundaries": [ "Internet", "VPC" ]
 }`;

@@ -2,8 +2,8 @@ export interface SRGComponent {
   id: string;
   name: string;
   type: 'Process' | 'DataStore' | 'ExternalEntity' | 'DataFlow';
-  c4Type?: 'Person' | 'System' | 'Container' | 'Database';
-  c4Level?: 'L1' | 'L2' | 'Both';
+  c4Type?: 'Person' | 'System' | 'Container' | 'Database' | 'Component';
+  c4Level?: 'L1' | 'L2' | 'L3' | 'Global';
   description: string;
   metadata?: Record<string, any>;
 }
