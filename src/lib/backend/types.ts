@@ -32,6 +32,8 @@ export interface Threat {
   cvssScore: number;
   severity: 'Critical' | 'High' | 'Medium' | 'Low';
   mitigations?: string[];
+  evidence?: string;
+  reasoning?: string;
 }
 
 export interface ComplianceGap {

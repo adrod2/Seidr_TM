@@ -53,13 +53,15 @@ export const agentThreatModeling = async (srg: SystemRepresentationGraph, framew
   const cached = await getCachedResult<Threat[]>('threatModeling', hash);
   if (cached) return cached;
 
-  const systemPrompt = `You are an expert threat modeler using the ${framework} framework. Analyze this System Representation Graph (SRG) JSON and identify potential threats. 
+  const systemPrompt = `You are an expert threat modeler using the ${framework} framework. Analyze this System Representation Graph (SRG) JSON and identify potential threats in deep detail. 
 Return ONLY a valid JSON array of objects with this EXACT structure:
 [
   { 
     "id": "T-001", 
     "title": "string", 
-    "description": "string", 
+    "description": "string (a comprehensive summary of the threat)", 
+    "evidence": "string (point out the exact components, missing boundaries, or data flows in the SRG that prove this threat exists)",
+    "reasoning": "string (explain step-by-step how an attacker would exploit this vulnerability)",
     "category": "string (the threat category according to the ${framework} framework)", 
     "componentId": "string (name of the vulnerable component)", 
     "cvssScore": 8.5, 
