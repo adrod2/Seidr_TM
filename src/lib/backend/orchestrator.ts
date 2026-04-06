@@ -79,7 +79,10 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     
     const riskScore = Math.min(100, Math.round(avgScore * 10 * riskMultiplier));
 
-    const newModelId = `m-${Math.random().toString(36).substr(2, 6)}`;
+    // Generate a clear, unique Model ID (e.g., TM-LQYE10B-X4A1)
+    const timestampStr = Date.now().toString(36).toUpperCase();
+    const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const newModelId = `TM-${timestampStr}-${randomStr}`;
 
     // Save to Local Dexie DB
     await db.threatModels.put({

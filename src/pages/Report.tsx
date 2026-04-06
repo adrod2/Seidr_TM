@@ -74,7 +74,8 @@ export const Report = () => {
             </span>
           </div>
           <p className="text-muted-foreground text-sm flex items-center gap-2">
-            Model ID: {modelData.id.split('-')[0]} <span className="px-1">•</span> Generated: {formattedDate}
+            Model ID: <span className="font-mono text-xs bg-secondary/50 px-1.5 py-0.5 rounded border border-border/50">{modelData.id}</span>
+            <span className="px-1">•</span> Generated: {formattedDate}
           </p>
         </div>
         <div className="flex gap-3">

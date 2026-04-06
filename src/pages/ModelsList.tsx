@@ -58,11 +58,15 @@ export const ModelsList = () => {
                 </div>
                 
                 <h3 className="text-lg font-bold mb-1 truncate">{model.name}</h3>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-6">
-                  <Calendar className="h-3.5 w-3.5" />
-                  <span>{new Date(model.date).toISOString().split('T')[0]}</span>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mb-6">
+                  <div className="flex items-center gap-1">
+                    <Calendar className="h-3.5 w-3.5" />
+                    <span>{new Date(model.date).toISOString().split('T')[0]}</span>
+                  </div>
                   <span className="px-1">•</span>
-                  <span className="truncate w-16" title={model.id}>{model.id.split('-')[0]}...</span>
+                  <span className="font-mono text-[10px] bg-secondary/50 px-1.5 py-0.5 rounded border border-border/50">
+                    {model.id}
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mb-6">

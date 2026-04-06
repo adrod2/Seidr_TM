@@ -104,7 +104,7 @@ export const DataManagementTab = () => {
               className="bg-secondary text-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-secondary/80 transition-colors shadow-sm disabled:opacity-50"
             >
               <Clock className="h-4 w-4" />
-              Delete >30 Days Old
+              Delete {'>'}30 Days Old
             </button>
             <button 
               onClick={handleClearAll}

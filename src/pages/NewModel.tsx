@@ -52,7 +52,8 @@ export const NewModel = () => {
   const docInputRef = useRef<HTMLInputElement>(null);
 
   // --- Form State ---
-  const [modelName, setModelName] = useState('New System Analysis');
+  const [modelName, setModelName] = useState('');
+  const [showNameError, setShowNameError] = useState(false);
   const [description, setDescription] = useState('');
   const [repoUrl, setRepoUrl] = useState('');
   const [uploadedDiagrams, setUploadedDiagrams] = useState<File[]>([]);
@@ -83,6 +84,14 @@ export const NewModel = () => {
   };
 
   const handleAnalyze = async () => {
+    // Validate System Name
+    if (!modelName.trim()) {
+      setShowNameError(true);
+      toast.error('System Name is mandatory. Please provide a name before running the analysis.');
+      return;
+    }
+    
+    setShowNameError(false);
     setIsAnalyzing(true);
     setCurrentStep(0);
 
@@ -183,11 +192,18 @@ export const NewModel = () => {
           <input 
             type="text"
             value={modelName}
-            onChange={(e) => setModelName(e.target.value)}
-            className="text-2xl font-bold bg-transparent border-none outline-none focus:ring-0 p-0 mb-1 w-full placeholder:text-muted-foreground/50"
-            placeholder="Name your threat model..."
+            onChange={(e) => {
+              setModelName(e.target.value);
+              if (showNameError && e.target.value.trim()) setShowNameError(false);
+            }}
+            className={`text-2xl font-bold bg-transparent outline-none focus:ring-0 p-0 mb-1 w-full placeholder:text-muted-foreground/50 border-b-2 transition-colors ${
+              showNameError ? 'border-destructive' : 'border-transparent focus:border-primary/50'
+            }`}
+            placeholder="System Name (Required)..."
           />
-          <p className="text-muted-foreground text-sm">Provide system context to begin the analysis. All inputs are optional.</p>
+          <p className={`text-sm mt-1 ${showNameError ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+            {showNameError ? 'A system name is required to begin analysis.' : 'Provide system context to begin the analysis.'}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative flex items-center">
