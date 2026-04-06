@@ -34,6 +34,7 @@ const TabButton = ({ active, icon: Icon, label, onClick }: any) => (
 
 const analysisSteps = [
   "Ingesting system context and user inputs...",
+  "Analyzing repository code and dependencies...",
   "Parsing architecture diagrams and data flows...",
   "Identifying trust boundaries and components...",
   "Applying threat framework heuristic rules...",

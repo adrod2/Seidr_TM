@@ -1,6 +1,7 @@
 import { runSecurityPipeline } from './securityPipeline';
-import { agentC4Architect, agentThreatModeling, agentCompliance } from './agents';
+import { agentC4Architect, agentThreatModeling, agentCompliance, agentRepositoryAnalysis } from './agents';
 import { db } from '../db';
+import { Threat } from './types';
 
 export interface AnalysisPayload {
   name: string;
@@ -29,29 +30,48 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
       Additional Docs [${payload.documentation?.title || 'Untitled'}]: ${payload.documentation?.content || 'None'}
     `.trim();
 
-    onProgress(1);
+    onProgress(0);
     const { sanitisedInput, piiRedactedCount } = runSecurityPipeline(fullContext);
 
     if (piiRedactedCount > 0) {
       console.log(`[Audit] Redacted ${piiRedactedCount} PII elements from input`);
     }
 
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    onProgress(1);
+    let finalInput = sanitisedInput;
+    let repoThreats: Threat[] = [];
+    
+    if (payload.repositoryUrl) {
+      try {
+        const repoAnalysis = await agentRepositoryAnalysis(payload.repositoryUrl, sanitisedInput);
+        finalInput += `\n\nRepository Inferred Purpose:\n${repoAnalysis.inferredPurpose}`;
+        repoThreats = repoAnalysis.inherentVulnerabilities || [];
+      } catch (e) {
+        console.warn("Repository analysis failed, skipping repo specific threats.", e);
+      }
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
     onProgress(2);
+    const srg = await agentC4Architect(finalInput);
 
     onProgress(3);
-    const srg = await agentC4Architect(sanitisedInput);
+    await new Promise(resolve => setTimeout(resolve, 800)); // Visual buffer for Identifying trust boundaries
 
     onProgress(4);
     const framework = payload.frameworks[0] || 'STRIDE';
-    const threats = await agentThreatModeling(srg, framework);
+    const archThreats = await agentThreatModeling(srg, framework);
+    
+    // Combine architecture threats and SAST repo threats
+    const allThreats = [...archThreats, ...repoThreats].sort((a, b) => b.cvssScore - a.cvssScore);
 
     onProgress(5);
-    const complianceGaps = await agentCompliance(threats);
+    const complianceGaps = await agentCompliance(allThreats);
 
     onProgress(6);
     
-    const avgScore = threats.reduce((acc, t) => acc + t.cvssScore, 0) / (threats.length || 1);
+    const avgScore = allThreats.length > 0 ? allThreats.reduce((acc, t) => acc + t.cvssScore, 0) / allThreats.length : 0;
     
     let riskMultiplier = 1.0;
     if (payload.questionnaire?.dataClassification.includes('Highly Restricted')) riskMultiplier += 0.2;
@@ -65,12 +85,12 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     await db.threatModels.put({
       id: newModelId,
       name: payload.name || 'Untitled Threat Model',
-      description: sanitisedInput,
+      description: finalInput,
       riskScore: riskScore,
       date: new Date().toISOString(),
       status: 'Completed',
       srg,
-      threats,
+      threats: allThreats,
       complianceGaps,
       framework
     });

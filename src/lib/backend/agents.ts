@@ -50,6 +50,42 @@ Return ONLY a valid JSON object with this EXACT structure:
 };
 
 /**
+ * Repository Analysis Agent: SAST and dependency heuristic scan
+ */
+export const agentRepositoryAnalysis = async (repositoryUrl: string, context: string): Promise<{ inferredPurpose: string, inherentVulnerabilities: Threat[] }> => {
+  const hash = await hashInput(`${repositoryUrl}_${context}`);
+  const cached = await getCachedResult<any>('repoAnalysis', hash);
+  if (cached) return cached;
+
+  const systemPrompt = `You are an expert static application security testing (SAST) and repository analysis agent.
+Given a repository URL and system context, perform a heuristic analysis to infer the repository's likely purpose, architecture, and technology stack.
+Identify 1-3 typical inherent code-level vulnerabilities (e.g., injection flaws, hardcoded secrets, insecure deserialization) that are statistically likely in this type of codebase based on standard patterns.
+
+Return ONLY a valid JSON object with this EXACT structure:
+{
+  "inferredPurpose": "A detailed explanation of what this repository likely does, its architecture, and tech stack.",
+  "inherentVulnerabilities": [
+    {
+      "id": "SAST-001",
+      "title": "string",
+      "description": "string (specific code-level vulnerability)",
+      "evidence": "string (explain why this codebase architecture is susceptible to this)",
+      "reasoning": "string (explain step-by-step how an attacker might exploit this)",
+      "category": "Code Vulnerability",
+      "componentId": "Repository Codebase",
+      "cvssScore": 7.5,
+      "severity": "High" | "Medium" | "Low"
+    }
+  ]
+}`;
+
+  const result = await callLLM(systemPrompt, `Repository URL: ${repositoryUrl}\nContext: ${context}`);
+  
+  await setCachedResult('repoAnalysis', hash, result);
+  return result as { inferredPurpose: string, inherentVulnerabilities: Threat[] };
+};
+
+/**
  * Threat Modeling Agent: Analyzes the SRG to identify threats based on the selected framework.
  */
 export const agentThreatModeling = async (srg: SystemRepresentationGraph, framework: string): Promise<Threat[]> => {
