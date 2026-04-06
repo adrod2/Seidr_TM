@@ -46,33 +46,53 @@ const C4ArchitectureContent = ({ srg, modelId }: { srg?: any, modelId?: string }
     const positionCounters: Record<string, number> = { Person: 0, System: 0, Container: 0, Component: 0, Database: 0 };
 
     const newNodes = filteredComponents.map((c: any) => {
-      let icon = Server;
-      let iconBg = 'bg-secondary';
-      let iconColor = 'text-foreground';
-      let style = 'bg-card border-border/50';
-
       const c4Type = c.c4Type || (c.type === 'ExternalEntity' ? 'Person' : c.type === 'DataStore' ? 'Database' : 'Container');
 
+      const nodeData = {
+        label: c.name,
+        type: c4Type,
+        description: c.description,
+        icon: Server,
+        containerStyle: '',
+        iconBg: '',
+        iconColor: '',
+        descBg: '',
+        descText: '',
+        typeText: ''
+      };
+
       if (c4Type === 'Person') {
-        icon = User;
-        iconBg = 'bg-primary/10';
-        iconColor = 'text-primary';
-        style = 'bg-card border-primary/30';
+        nodeData.icon = User;
+        nodeData.containerStyle = 'bg-card border-blue-500/40 text-card-foreground';
+        nodeData.iconBg = 'bg-blue-500/10';
+        nodeData.iconColor = 'text-blue-500';
+        nodeData.descBg = 'bg-secondary/50';
+        nodeData.descText = 'text-muted-foreground';
+        nodeData.typeText = 'text-blue-500/80';
       } else if (c4Type === 'Database') {
-        icon = Database;
-        iconBg = 'bg-emerald-500/20';
-        iconColor = 'text-emerald-500';
-        style = 'bg-card border-emerald-500/30';
+        nodeData.icon = Database;
+        nodeData.containerStyle = 'bg-emerald-600 dark:bg-emerald-700 border-emerald-800 dark:border-emerald-500 text-white';
+        nodeData.iconBg = 'bg-white/20';
+        nodeData.iconColor = 'text-white';
+        nodeData.descBg = 'bg-black/20';
+        nodeData.descText = 'text-emerald-50';
+        nodeData.typeText = 'text-emerald-100/90';
       } else if (c4Type === 'Container' || c4Type === 'System') {
-        icon = Globe;
-        style = 'bg-primary text-primary-foreground border-primary/50';
-        iconBg = 'bg-primary-foreground/20';
-        iconColor = 'text-primary-foreground';
-      } else if (c4Type === 'Component') {
-        icon = Component;
-        style = 'bg-accent/10 text-accent-foreground border-accent/30';
-        iconBg = 'bg-background';
-        iconColor = 'text-accent';
+        nodeData.icon = Globe;
+        nodeData.containerStyle = 'bg-blue-600 dark:bg-blue-700 border-blue-800 dark:border-blue-500 text-white';
+        nodeData.iconBg = 'bg-white/20';
+        nodeData.iconColor = 'text-white';
+        nodeData.descBg = 'bg-black/20';
+        nodeData.descText = 'text-blue-50';
+        nodeData.typeText = 'text-blue-100/90';
+      } else { // Component
+        nodeData.icon = Component;
+        nodeData.containerStyle = 'bg-card border-border text-card-foreground';
+        nodeData.iconBg = 'bg-secondary';
+        nodeData.iconColor = 'text-foreground';
+        nodeData.descBg = 'bg-secondary/50';
+        nodeData.descText = 'text-muted-foreground';
+        nodeData.typeText = 'text-muted-foreground';
       }
 
       // Restore position or auto-layout
@@ -92,15 +112,7 @@ const C4ArchitectureContent = ({ srg, modelId }: { srg?: any, modelId?: string }
         id: c.id,
         type: 'c4Node',
         position: pos,
-        data: {
-          label: c.name,
-          type: c4Type,
-          description: c.description,
-          icon: icon,
-          containerStyle: style,
-          iconBg: iconBg,
-          iconColor: iconColor
-        }
+        data: nodeData
       };
     });
 
@@ -114,10 +126,10 @@ const C4ArchitectureContent = ({ srg, modelId }: { srg?: any, modelId?: string }
         label: e.label || e.protocol || 'Data Flow',
         type: 'smoothstep',
         animated: true,
-        style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 },
-        labelStyle: { fill: 'hsl(var(--muted-foreground))', fontWeight: 600, fontSize: 11 },
-        labelBgStyle: { fill: 'hsl(var(--background))', fillOpacity: 0.8 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: 'hsl(var(--primary))' }
+        style: { stroke: 'hsl(var(--muted-foreground))', strokeWidth: 2 },
+        labelStyle: { fill: 'hsl(var(--foreground))', fontWeight: 600, fontSize: 11 },
+        labelBgStyle: { fill: 'hsl(var(--card))', fillOpacity: 0.9 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: 'hsl(var(--muted-foreground))' }
       }));
 
     setNodes(newNodes);
