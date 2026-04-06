@@ -17,6 +17,10 @@ Given the comprehensive system context, extract MAXIMUM details to build Level 1
 - Level 2 (L2): Break down the main system into internal containers (Web App, API Gateway, Microservices, Databases).
 - Level 3 (L3): Break down the containers into specific components (Controllers, Services, Repositories, Security Modules).
 
+CRITICAL INSTRUCTION FOR DESCRIPTIONS:
+The "description" field for EVERY component MUST contain actual, real data from the input. DO NOT use generic phrases like "A database" or "A frontend". 
+Instead, specify exactly what it does, the precise technologies used (e.g., AWS, PostgreSQL, React, Auth0), and the specific data it processes based on the provided context. If a technology is not specified, infer its purpose precisely from the context.
+
 Rules for 'c4Level': 
 - Use 'Global' for Persons/External Systems that appear across all levels.
 - Use 'L1', 'L2', or 'L3' appropriately for the systems, containers, and components.
@@ -30,7 +34,7 @@ Return ONLY a valid JSON object with this EXACT structure:
       "type": "Process" | "DataStore" | "ExternalEntity" | "DataFlow",
       "c4Type": "Person" | "System" | "Container" | "Database" | "Component",
       "c4Level": "L1" | "L2" | "L3" | "Global",
-      "description": "highly detailed description based on input" 
+      "description": "Specific real data from context: technology stack, exact purpose, and data handled." 
     } 
   ],
   "edges": [ 
