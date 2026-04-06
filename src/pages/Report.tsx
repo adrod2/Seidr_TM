@@ -112,7 +112,7 @@ export const Report = () => {
 
       <div className="bg-card border border-border/50 rounded-3xl shadow-sm flex-1 mt-4 overflow-hidden flex">
         <div className="flex-1 flex flex-col min-w-0">
-          {activeTab === 'threats' && <ThreatCatalogTab threats={modelData.threats} />}
+          {activeTab === 'threats' && <ThreatCatalogTab threats={modelData.threats} framework={modelData.framework} />}
           {activeTab === 'c4' && <C4ArchitectureTab srg={modelData.srg} modelId={modelData.id} />}
           {activeTab === 'mitigations' && <MitigationsTab threats={modelData.threats} />}
           {activeTab === 'compliance' && <ComplianceTab gaps={modelData.complianceGaps} />}
