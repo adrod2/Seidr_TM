@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Users, Shield, Database, Settings2, BrainCircuit } from 'lucide-react';
+import { Users, Shield, Database, Settings2, BrainCircuit, HardDrive } from 'lucide-react';
 import { AiConfigTab } from '../components/admin/AiConfigTab';
 import { RiskContextTab } from '../components/admin/RiskContextTab';
 import { SystemContextTab } from '../components/admin/SystemContextTab';
 import { UserManagementTab } from '../components/admin/UserManagementTab';
 import { IntegrationsTab } from '../components/admin/IntegrationsTab';
+import { DataManagementTab } from '../components/admin/DataManagementTab';
 
 const TabButton = ({ active, icon: Icon, label, onClick }: any) => (
   <button
@@ -36,6 +37,7 @@ export const Admin = () => {
         <TabButton active={activeTab === 'system'} onClick={() => setActiveTab('system')} icon={Database} label="System Context" />
         <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={Users} label="User Management" />
         <TabButton active={activeTab === 'integrations'} onClick={() => setActiveTab('integrations')} icon={Settings2} label="Integrations" />
+        <TabButton active={activeTab === 'data'} onClick={() => setActiveTab('data')} icon={HardDrive} label="Data Management" />
       </div>
 
       <div className="bg-card border border-border/50 rounded-3xl shadow-sm flex-1 overflow-y-auto p-6">
@@ -44,6 +46,7 @@ export const Admin = () => {
         {activeTab === 'system' && <SystemContextTab />}
         {activeTab === 'users' && <UserManagementTab />}
         {activeTab === 'integrations' && <IntegrationsTab />}
+        {activeTab === 'data' && <DataManagementTab />}
       </div>
     </div>
   );
