@@ -7,10 +7,44 @@ import { db } from '@/lib/db';
 export const DataManagementTab = () => {
   const models = useLiveQuery(() => db.threatModels.orderBy('date').reverse().toArray());
   const [isClearing, setIsClearing] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked && models) {
+      setSelectedIds(new Set(models.map(m => m.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelectOne = (id: string, checked: boolean) => {
+    const newSelected = new Set(selectedIds);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    if (confirm(`Are you sure you want to delete ${selectedIds.size} selected threat models?`)) {
+      await db.threatModels.bulkDelete(Array.from(selectedIds));
+      setSelectedIds(new Set());
+      toast.success(`Deleted ${selectedIds.size} threat models successfully.`);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this threat model?')) {
       await db.threatModels.delete(id);
+      
+      // Remove from selection if it was selected
+      const newSelected = new Set(selectedIds);
+      newSelected.delete(id);
+      setSelectedIds(newSelected);
+      
       toast.success('Threat model deleted successfully.');
     }
   };
@@ -29,6 +63,7 @@ export const DataManagementTab = () => {
       
       const ids = oldModels.map(m => m.id);
       await db.threatModels.bulkDelete(ids);
+      setSelectedIds(new Set()); // Reset selection to be safe
       toast.success(`Deleted ${ids.length} old threat models.`);
     }
   };
@@ -37,6 +72,7 @@ export const DataManagementTab = () => {
     if (confirm('Are you sure you want to delete ALL threat models? This action is irreversible.')) {
       setIsClearing(true);
       await db.threatModels.clear();
+      setSelectedIds(new Set());
       setIsClearing(false);
       toast.success('All threat models cleared.');
     }
@@ -53,6 +89,15 @@ export const DataManagementTab = () => {
             <p className="text-sm text-muted-foreground">Manage and delete stored threat models from the local database.</p>
           </div>
           <div className="flex gap-3">
+            {selectedIds.size > 0 && (
+              <button 
+                onClick={handleDeleteSelected}
+                className="bg-destructive/10 text-destructive border border-destructive/20 px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-destructive/20 transition-colors shadow-sm"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete Selected ({selectedIds.size})
+              </button>
+            )}
             <button 
               onClick={handleDeleteOld}
               disabled={models.length === 0}
@@ -76,6 +121,14 @@ export const DataManagementTab = () => {
           <table className="w-full text-sm text-left">
             <thead className="bg-secondary/50 text-muted-foreground text-xs uppercase">
               <tr>
+                <th className="px-6 py-4 w-12 text-center">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-border/50 text-primary focus:ring-primary/50 cursor-pointer accent-primary"
+                    checked={models.length > 0 && selectedIds.size === models.length}
+                    onChange={handleSelectAll}
+                  />
+                </th>
                 <th className="px-6 py-4">Model Name / ID</th>
                 <th className="px-6 py-4">Date Generated</th>
                 <th className="px-6 py-4">Risk Score</th>
@@ -84,7 +137,15 @@ export const DataManagementTab = () => {
             </thead>
             <tbody className="divide-y divide-border/50">
               {models.map((model) => (
-                <tr key={model.id} className="bg-card hover:bg-secondary/20 transition-colors">
+                <tr key={model.id} className={`bg-card hover:bg-secondary/20 transition-colors ${selectedIds.has(model.id) ? 'bg-primary/5' : ''}`}>
+                  <td className="px-6 py-4 w-12 text-center">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 rounded border-border/50 text-primary focus:ring-primary/50 cursor-pointer accent-primary"
+                      checked={selectedIds.has(model.id)}
+                      onChange={(e) => handleSelectOne(model.id, e.target.checked)}
+                    />
+                  </td>
                   <td className="px-6 py-4">
                     <div className="font-bold text-foreground">{model.name}</div>
                     <div className="text-xs text-muted-foreground font-mono">{model.id}</div>
@@ -117,7 +178,7 @@ export const DataManagementTab = () => {
               ))}
               {models.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-8 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">
                     No threat models found in the database.
                   </td>
                 </tr>
