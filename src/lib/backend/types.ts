@@ -2,6 +2,8 @@ export interface SRGComponent {
   id: string;
   name: string;
   type: 'Process' | 'DataStore' | 'ExternalEntity' | 'DataFlow';
+  c4Type?: 'Person' | 'System' | 'Container' | 'Database';
+  c4Level?: 'L1' | 'L2' | 'Both';
   description: string;
   metadata?: Record<string, any>;
 }
@@ -11,6 +13,7 @@ export interface SRGEdge {
   sourceId: string;
   targetId: string;
   protocol?: string;
+  label?: string;
   dataClassification?: string;
 }
 

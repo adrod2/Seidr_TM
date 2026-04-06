@@ -1,5 +1,5 @@
 import { runSecurityPipeline } from './securityPipeline';
-import { agentNormalizer, agentThreatModeling, agentCompliance } from './agents';
+import { agentC4Architect, agentThreatModeling, agentCompliance } from './agents';
 import { db } from '../db';
 
 export interface AnalysisPayload {
@@ -40,7 +40,7 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     onProgress(2);
 
     onProgress(3);
-    const srg = await agentNormalizer(sanitisedInput);
+    const srg = await agentC4Architect(sanitisedInput);
 
     onProgress(4);
     const framework = payload.frameworks[0] || 'STRIDE';

@@ -3,24 +3,39 @@ import { SystemRepresentationGraph, Threat, ComplianceGap } from './types';
 import { callLLM } from './llmClient';
 
 /**
- * Normalizer Agent: Converts raw system descriptions into a C4 System Representation Graph (SRG).
+ * C4 Architecture Agent: Converts raw system descriptions into a highly structured C4 System Representation Graph (SRG).
  */
-export const agentNormalizer = async (sanitisedInput: string): Promise<SystemRepresentationGraph> => {
+export const agentC4Architect = async (sanitisedInput: string): Promise<SystemRepresentationGraph> => {
   const hash = await hashInput(sanitisedInput);
-  const cached = await getCachedResult<SystemRepresentationGraph>('normalizer', hash);
+  const cached = await getCachedResult<SystemRepresentationGraph>('c4Architect', hash);
   if (cached) return cached;
 
-  const systemPrompt = `You are an expert security architect. Given the system description, identify the architectural components, data flows, and trust boundaries. 
+  const systemPrompt = `You are an expert software architect specializing in the C4 model. 
+Given the comprehensive system context, identify the architectural components and data flows to build Level 1 (System Context) and Level 2 (Container) diagrams.
+- Level 1 (L1) should include external users (Person), external systems, and the main system itself.
+- Level 2 (L2) should break down the main system into internal containers (Web App, API, Database, etc.) and include the external users/systems interacting with them.
+
 Return ONLY a valid JSON object with this EXACT structure:
 {
-  "components": [ { "id": "c1", "name": "string", "type": "Process" | "DataStore" | "ExternalEntity" | "DataFlow", "description": "string" } ],
-  "edges": [ { "id": "e1", "sourceId": "c1", "targetId": "c2", "protocol": "HTTPS" } ],
+  "components": [ 
+    { 
+      "id": "c1", 
+      "name": "string", 
+      "type": "Process" | "DataStore" | "ExternalEntity" | "DataFlow",
+      "c4Type": "Person" | "System" | "Container" | "Database",
+      "c4Level": "L1" | "L2" | "Both",
+      "description": "string" 
+    } 
+  ],
+  "edges": [ 
+    { "id": "e1", "sourceId": "c1", "targetId": "c2", "protocol": "HTTPS", "label": "description of the action (e.g., 'Sends data to')" } 
+  ],
   "trustBoundaries": [ "Internet", "VPC" ]
 }`;
 
   const result = await callLLM(systemPrompt, `System Context:\n${sanitisedInput}`);
   
-  await setCachedResult('normalizer', hash, result);
+  await setCachedResult('c4Architect', hash, result);
   return result as SystemRepresentationGraph;
 };
 
