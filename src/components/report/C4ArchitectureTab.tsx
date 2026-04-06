@@ -10,16 +10,18 @@ import {
   applyEdgeChanges,
   addEdge,
   Connection,
-  Edge
+  ReactFlowProvider,
+  useReactFlow
 } from '@xyflow/react';
-import { Server, Database, Globe, User, Plus, Save, Component, X } from 'lucide-react';
+import { Server, Database, Globe, User, Plus, Save, Component, X, LayoutTemplate } from 'lucide-react';
 import { C4Node } from './C4Node';
 import { db } from '@/lib/db';
 import { toast } from 'sonner';
 import '@xyflow/react/dist/style.css';
 
-export const C4ArchitectureTab = ({ srg, modelId }: { srg?: any, modelId?: string }) => {
+const C4ArchitectureContent = ({ srg, modelId }: { srg?: any, modelId?: string }) => {
   const nodeTypes = useMemo(() => ({ c4Node: C4Node }), []);
+  const { fitView } = useReactFlow();
   
   const [draftSrg, setDraftSrg] = useState(srg || { components: [], edges: [] });
   const [nodes, setNodes] = useNodesState([]);
@@ -181,6 +183,67 @@ export const C4ArchitectureTab = ({ srg, modelId }: { srg?: any, modelId?: strin
     toast.success('Node added to diagram');
   };
 
+  const handleAutoLayout = () => {
+    const typeGroups: Record<string, any[]> = {
+      Person: [],
+      App: [],
+      Database: []
+    };
+
+    // Group current visible nodes into tiers
+    nodes.forEach(node => {
+      const type = node.data.type;
+      if (type === 'Person') typeGroups.Person.push(node);
+      else if (type === 'Database') typeGroups.Database.push(node);
+      else typeGroups.App.push(node);
+    });
+
+    setNodes(currentNodes => {
+      const updatedNodes = [...currentNodes];
+      
+      const applyTierPositions = (group: any[], yPos: number) => {
+        const spacingX = 300;
+        const startX = -((group.length - 1) * spacingX) / 2; // Center horizontally around x=0
+        
+        group.forEach((node, index) => {
+          const newPos = { x: startX + index * spacingX, y: yPos };
+          
+          // Update React Flow Node
+          const nodeIndex = updatedNodes.findIndex(n => n.id === node.id);
+          if (nodeIndex > -1) {
+            updatedNodes[nodeIndex] = { ...updatedNodes[nodeIndex], position: newPos };
+          }
+          
+          // Sync draftSrg
+          setDraftSrg(prev => {
+            const next = { ...prev };
+            const compIndex = next.components.findIndex((c: any) => c.id === node.id);
+            if (compIndex > -1) {
+              next.components[compIndex] = {
+                ...next.components[compIndex],
+                metadata: { ...next.components[compIndex].metadata, position: newPos }
+              };
+            }
+            return next;
+          });
+        });
+      };
+
+      applyTierPositions(typeGroups.Person, 0);
+      applyTierPositions(typeGroups.App, 250);
+      applyTierPositions(typeGroups.Database, 500);
+
+      return updatedNodes;
+    });
+
+    toast.success('Auto-layout applied!');
+    
+    // Fit view slightly after layout update
+    setTimeout(() => {
+      fitView({ duration: 800, padding: 0.2 });
+    }, 50);
+  };
+
   const handleSaveToDB = async () => {
     if (!modelId) return;
     try {
@@ -232,6 +295,12 @@ export const C4ArchitectureTab = ({ srg, modelId }: { srg?: any, modelId?: strin
         </div>
 
         <div className="flex gap-2 pointer-events-auto">
+          <button 
+            onClick={handleAutoLayout}
+            className="bg-card border border-border/50 text-foreground px-4 py-2 rounded-xl text-sm font-medium hover:bg-secondary transition-colors shadow-sm flex items-center gap-2"
+          >
+            <LayoutTemplate className="h-4 w-4" /> Auto Layout
+          </button>
           <button 
             onClick={handleAddNode}
             className="bg-card border border-border/50 text-foreground px-4 py-2 rounded-xl text-sm font-medium hover:bg-secondary transition-colors shadow-sm flex items-center gap-2"
@@ -302,3 +371,10 @@ export const C4ArchitectureTab = ({ srg, modelId }: { srg?: any, modelId?: strin
     </div>
   );
 };
+
+// Wrap with ReactFlowProvider to enable useReactFlow hook (for fitView)
+export const C4ArchitectureTab = (props: any) => (
+  <ReactFlowProvider>
+    <C4ArchitectureContent {...props} />
+  </ReactFlowProvider>
+);
