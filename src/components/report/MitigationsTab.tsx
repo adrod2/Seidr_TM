@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { toast } from 'sonner';
-import { Search, X, SlidersHorizontal, LayoutKanban, Filter, CheckCircle2, CircleDashed, ArrowRightCircle } from 'lucide-react';
+import { Search, X, SlidersHorizontal, KanbanSquare, Filter, CheckCircle2, CircleDashed, ArrowRightCircle } from 'lucide-react';
 
 export const MitigationsTab = ({ threats }: { threats?: any[] }) => {
   // Generate actions from threats, preserving category and severity for filtering
@@ -62,7 +62,7 @@ export const MitigationsTab = ({ threats }: { threats?: any[] }) => {
       <div className="p-5 border-b border-border/50 bg-card shadow-sm z-10 flex flex-col gap-4">
         <div className="flex justify-between items-center">
           <h3 className="font-bold text-lg flex items-center gap-2">
-            <LayoutKanban className="h-5 w-5 text-primary" />
+            <KanbanSquare className="h-5 w-5 text-primary" />
             Mitigation Plan
           </h3>
           <div className="flex items-center gap-3">
