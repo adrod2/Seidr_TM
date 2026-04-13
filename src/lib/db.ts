@@ -22,9 +22,11 @@ export interface AiConfig {
 
 export interface BusinessRisk {
   id: string;
-  desc: string;
-  appetite: string;
-  status: string;
+  name: string;
+  obligation: string;
+  riskOf: string;
+  dueTo: string;
+  controls: string;
 }
 
 export interface Document {
