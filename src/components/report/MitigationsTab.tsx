@@ -21,10 +21,11 @@ export const MitigationsTab = ({ threats }: { threats?: any[] }) => {
         threatCategory: t.category || 'Uncategorized',
         threatSeverity: t.severity || 'Medium',
         title: `Remediate: ${t.title}`,
+        suggestedMitigation: t.mitigation || 'Implement standard security controls, enforce least privilege, and validate all inputs at the system boundaries to mitigate this risk.',
         description: t.description || 'No detailed description provided for this threat.',
         reasoning: t.reasoning || '',
         effort: (t.severity === 'Critical' || t.severity === 'High') ? 'High' : t.severity === 'Medium' ? 'Medium' : 'Low',
-        status: idx === 0 ? 'In Progress' : 'Open',
+        status: 'Open',
         controls: ['AC-1', 'SI-2'],
         justification: ''
       })));
@@ -304,8 +305,16 @@ export const MitigationsTab = ({ threats }: { threats?: any[] }) => {
                                   <span className="font-bold text-foreground block mb-1">Threat Context:</span>
                                   <p className="leading-relaxed">{action.description}</p>
                                 </div>
+                                {action.suggestedMitigation && (
+                                  <div className="bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-lg text-emerald-700 dark:text-emerald-400 mt-2">
+                                    <span className="font-bold block mb-1 flex items-center gap-1.5">
+                                      <CheckCircle2 className="h-3 w-3" /> Suggested Mitigation Action:
+                                    </span>
+                                    <p>{action.suggestedMitigation}</p>
+                                  </div>
+                                )}
                                 {action.reasoning && (
-                                  <div>
+                                  <div className="mt-2">
                                     <span className="font-bold text-foreground block mb-1">Exploitation Risk:</span>
                                     <p className="leading-relaxed">{action.reasoning}</p>
                                   </div>
