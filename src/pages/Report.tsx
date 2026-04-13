@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { ShieldAlert, GitMerge, CheckSquare, FileCheck, Download, Share2, Sparkles, Loader2 } from 'lucide-react';
+import { ShieldAlert, GitMerge, CheckSquare, FileCheck, Download, Share2, Sparkles, Loader2, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
@@ -29,6 +29,7 @@ export const Report = () => {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState('threats');
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
 
   // Fetch from Dexie Local DB
   const modelData = useLiveQuery(() => id ? db.threatModels.get(id) : undefined, [id]);
@@ -63,6 +64,22 @@ export const Report = () => {
   const riskBadge = getRiskLevel(modelData.riskScore);
   const formattedDate = new Date(modelData.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
+  const exportLanguages = [
+    { id: 'en', label: 'English' },
+    { id: 'es', label: 'Spanish' },
+    { id: 'de', label: 'German' },
+    { id: 'pt', label: 'Portuguese' },
+    { id: 'zh', label: 'Chinese' }
+  ];
+
+  const handleExport = (language: string) => {
+    setIsExportMenuOpen(false);
+    toast.promise(new Promise(r => setTimeout(r, 2000)), { 
+      loading: `Generating PDF (${language})...`, 
+      success: `Report exported successfully in ${language}!` 
+    });
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] relative">
       <div className="flex items-center justify-between mb-6">
@@ -78,7 +95,7 @@ export const Report = () => {
             <span className="px-1">•</span> Generated: {formattedDate}
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 relative">
           <button 
             onClick={() => setIsCopilotOpen(true)}
             className="bg-accent/10 text-accent px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-accent/20 transition-all border border-accent/20 shadow-sm"
@@ -93,13 +110,38 @@ export const Report = () => {
             <Share2 className="h-4 w-4" />
             Share
           </button>
-          <button 
-            onClick={() => toast.promise(new Promise(r => setTimeout(r, 2000)), { loading: 'Generating PDF...', success: 'Report exported successfully!' })}
-            className="bg-primary text-primary-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-primary/90 transition-all shadow-sm"
-          >
-            <Download className="h-4 w-4" />
-            Export
-          </button>
+          
+          <div className="relative">
+            <button 
+              onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+              className="bg-primary text-primary-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-primary/90 transition-all shadow-sm"
+            >
+              <Download className="h-4 w-4" />
+              Export
+              <ChevronDown className={`h-3 w-3 transition-transform ${isExportMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isExportMenuOpen && (
+              <>
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setIsExportMenuOpen(false)}
+                ></div>
+                <div className="absolute right-0 top-full mt-2 w-40 bg-card border border-border/50 rounded-xl shadow-lg z-50 overflow-hidden flex flex-col py-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                  {exportLanguages.map(lang => (
+                    <button
+                      key={lang.id}
+                      onClick={() => handleExport(lang.label)}
+                      className="text-left px-4 py-2.5 text-sm font-medium hover:bg-secondary/80 transition-colors flex justify-between items-center"
+                    >
+                      {lang.label}
+                      {lang.id === 'en' && <span className="text-[10px] bg-secondary border border-border/50 px-1.5 py-0.5 rounded text-muted-foreground">Default</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
