@@ -17,20 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { startAnalysisPipeline } from '@/lib/backend/orchestrator';
-
-const TabButton = ({ active, icon: Icon, label, onClick }: any) => (
-  <button
-    onClick={onClick}
-    className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-      active 
-        ? 'bg-primary text-primary-foreground shadow-md' 
-        : 'bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground'
-    }`}
-  >
-    <Icon className="h-4 w-4" />
-    {label}
-  </button>
-);
+import { TabButton } from '@/components/TabButton';
 
 const analysisSteps = [
   "Ingesting system context and user inputs...",

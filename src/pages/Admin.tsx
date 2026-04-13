@@ -6,20 +6,7 @@ import { SystemContextTab } from '../components/admin/SystemContextTab';
 import { UserManagementTab } from '../components/admin/UserManagementTab';
 import { IntegrationsTab } from '../components/admin/IntegrationsTab';
 import { DataManagementTab } from '../components/admin/DataManagementTab';
-
-const TabButton = ({ active, icon: Icon, label, onClick }: any) => (
-  <button
-    onClick={onClick}
-    className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-      active 
-        ? 'bg-primary text-primary-foreground shadow-md' 
-        : 'bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground'
-    }`}
-  >
-    <Icon className="h-4 w-4" />
-    {label}
-  </button>
-);
+import { TabButton } from '../components/TabButton';
 
 export const Admin = () => {
   const [activeTab, setActiveTab] = useState('ai-config');

@@ -10,20 +10,7 @@ import { C4ArchitectureTab } from '@/components/report/C4ArchitectureTab';
 import { MitigationsTab } from '@/components/report/MitigationsTab';
 import { ComplianceTab } from '@/components/report/ComplianceTab';
 import { CopilotSidebar } from '@/components/report/CopilotSidebar';
-
-const TabButton = ({ active, icon: Icon, label, onClick }: any) => (
-  <button
-    onClick={onClick}
-    className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-      active 
-        ? 'bg-primary text-primary-foreground shadow-md' 
-        : 'bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground'
-    }`}
-  >
-    <Icon className="h-4 w-4" />
-    {label}
-  </button>
-);
+import { TabButton } from '@/components/TabButton';
 
 export const Report = () => {
   const { id } = useParams();

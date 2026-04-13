@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo } from 'react';
 import { 
   ShieldCheck, 
   TrendingDown, 
@@ -57,49 +57,52 @@ const StatCard = ({ title, value, change, icon: Icon, trendColor, subtext }: any
 export const Dashboard = () => {
   const models = useLiveQuery(() => db.threatModels.toArray());
   
-  const [metrics, setMetrics] = useState({ avgScore: 0, modelCount: 0, change: '0 pts' });
-  const [chartData, setChartData] = useState(historicalRiskData);
-  const [frameworkData, setFrameworkData] = useState<any[]>([]);
-  const [totalThreats, setTotalThreats] = useState(0);
-
-  useEffect(() => {
-    if (models) {
-      let totalScore = 0;
-      let openThreats = 0;
-      const categoryCounts: Record<string, number> = {};
-
-      models.forEach(m => {
-        totalScore += m.riskScore;
-        m.threats?.forEach(t => {
-          openThreats++;
-          const cat = t.category || 'Unknown';
-          categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
-        });
-      });
-
-      const avg = models.length > 0 ? Math.round(totalScore / models.length) : 0;
-      setMetrics({
-        avgScore: avg,
-        modelCount: models.length,
-        change: avg < 58 ? `-${58 - avg} pts` : `+${avg - 58} pts`
-      });
-
-      const currentMonth = new Date().toLocaleString('default', { month: 'short' });
-      setChartData([...historicalRiskData, { name: currentMonth, score: avg, target: 50 }]);
-
-      setTotalThreats(openThreats + 85); // 85 historically mitigated
-
-      const newFrameworkData = Object.keys(categoryCounts)
-        .map(category => ({
-          name: category.length > 15 ? category.substring(0, 15) + '...' : category,
-          mitigated: Math.floor(Math.random() * 15) + 5,
-          open: categoryCounts[category]
-        }))
-        .sort((a, b) => b.open - a.open) // Sort by most open threats
-        .slice(0, 8); // Limit to top 8 categories so chart stays clean
-        
-      setFrameworkData(newFrameworkData);
+  // Consolidating rendering state into a single useMemo eliminates cascading updates and re-renders
+  const stats = useMemo(() => {
+    if (!models) {
+      return {
+        metrics: { avgScore: 0, modelCount: 0, change: '0 pts' },
+        chartData: historicalRiskData,
+        frameworkData: [],
+        totalThreats: 0
+      };
     }
+
+    let totalScore = 0;
+    let openThreats = 0;
+    const categoryCounts: Record<string, number> = {};
+
+    models.forEach(m => {
+      totalScore += m.riskScore;
+      m.threats?.forEach(t => {
+        openThreats++;
+        const cat = t.category || 'Unknown';
+        categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+      });
+    });
+
+    const avg = models.length > 0 ? Math.round(totalScore / models.length) : 0;
+    const metrics = {
+      avgScore: avg,
+      modelCount: models.length,
+      change: avg < 58 ? `-${58 - avg} pts` : `+${avg - 58} pts`
+    };
+
+    const currentMonth = new Date().toLocaleString('default', { month: 'short' });
+    const chartData = [...historicalRiskData, { name: currentMonth, score: avg, target: 50 }];
+
+    const totalThreats = openThreats + 85; // 85 historically mitigated
+
+    const frameworkData = Object.keys(categoryCounts)
+      .map(category => ({
+        name: category.length > 15 ? category.substring(0, 15) + '...' : category,
+        mitigated: Math.floor(Math.random() * 15) + 5,
+        open: categoryCounts[category]
+      }))
+      .sort((a, b) => b.open - a.open) // Sort by most open threats
+      .slice(0, 8); // Limit to top 8 categories so chart stays clean
+      
+    return { metrics, chartData, totalThreats, frameworkData };
   }, [models]);
 
   if (models === undefined) {
@@ -110,6 +113,7 @@ export const Dashboard = () => {
     );
   }
 
+  const { metrics, chartData, frameworkData, totalThreats } = stats;
   const isRiskGood = metrics.avgScore < 50;
 
   return (
