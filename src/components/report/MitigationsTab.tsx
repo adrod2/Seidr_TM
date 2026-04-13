@@ -1,21 +1,35 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Search, X, SlidersHorizontal, KanbanSquare, Filter, CheckCircle2, CircleDashed, ArrowRightCircle } from 'lucide-react';
+import { Search, X, SlidersHorizontal, KanbanSquare, Filter, CheckCircle2, CircleDashed, ArrowRightCircle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 
 export const MitigationsTab = ({ threats }: { threats?: any[] }) => {
-  // Generate actions from threats, preserving category and severity for filtering
-  const actions = useMemo(() => {
-    return threats?.map((t, idx) => ({
-      id: `ACT-${idx + 100}`,
-      threatId: t.id,
-      threatCategory: t.category || 'Uncategorized',
-      threatSeverity: t.severity || 'Medium',
-      title: `Remediate: ${t.title}`,
-      effort: (t.severity === 'Critical' || t.severity === 'High') ? 'High' : t.severity === 'Medium' ? 'Medium' : 'Low',
-      status: idx === 0 ? 'In Progress' : 'Open',
-      controls: ['AC-1', 'SI-2']
-    })) || [];
-  }, [threats]);
+  // Local state for actions to support drag-and-drop and exception justifications
+  const [actions, setActions] = useState<any[]>([]);
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+
+  // Modal State for Exception Justification
+  const [isExceptionModalOpen, setExceptionModalOpen] = useState(false);
+  const [pendingExceptionAction, setPendingExceptionAction] = useState<string | null>(null);
+  const [exceptionReason, setExceptionReason] = useState('');
+
+  // Initialize actions from threats when the component mounts
+  useEffect(() => {
+    if (threats && actions.length === 0) {
+      setActions(threats.map((t, idx) => ({
+        id: `ACT-${idx + 100}`,
+        threatId: t.id,
+        threatCategory: t.category || 'Uncategorized',
+        threatSeverity: t.severity || 'Medium',
+        title: `Remediate: ${t.title}`,
+        description: t.description || 'No detailed description provided for this threat.',
+        reasoning: t.reasoning || '',
+        effort: (t.severity === 'Critical' || t.severity === 'High') ? 'High' : t.severity === 'Medium' ? 'Medium' : 'Low',
+        status: idx === 0 ? 'In Progress' : 'Open',
+        controls: ['AC-1', 'SI-2'],
+        justification: ''
+      })));
+    }
+  }, [threats, actions.length]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Categories');
@@ -53,12 +67,69 @@ export const MitigationsTab = ({ threats }: { threats?: any[] }) => {
   const statuses = [
     { id: 'Open', label: 'To Do', icon: CircleDashed, color: 'text-muted-foreground' },
     { id: 'In Progress', label: 'In Progress', icon: ArrowRightCircle, color: 'text-blue-500' },
-    { id: 'Done', label: 'Done', icon: CheckCircle2, color: 'text-emerald-500' }
+    { id: 'Done', label: 'Done', icon: CheckCircle2, color: 'text-emerald-500' },
+    { id: 'Exception', label: 'Exception', icon: AlertTriangle, color: 'text-orange-500' }
   ];
 
+  const toggleExpand = (id: string) => {
+    const newSet = new Set(expandedCards);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setExpandedCards(newSet);
+  };
+
+  // Drag and Drop Handlers
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.setData('actionId', id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault(); // Necessary to allow drop
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, newStatus: string) => {
+    e.preventDefault();
+    const actionId = e.dataTransfer.getData('actionId');
+    if (!actionId) return;
+
+    const action = actions.find(a => a.id === actionId);
+    if (!action || action.status === newStatus) return;
+
+    if (newStatus === 'Exception') {
+      setPendingExceptionAction(actionId);
+      setExceptionReason(action.justification || '');
+      setExceptionModalOpen(true);
+    } else {
+      setActions(prev => prev.map(a => a.id === actionId ? { ...a, status: newStatus } : a));
+      toast.success(`Task moved to ${newStatus}`);
+    }
+  };
+
+  const confirmException = () => {
+    if (!exceptionReason.trim()) {
+      toast.error('A business or technical justification is strictly required for exceptions.');
+      return;
+    }
+    
+    if (pendingExceptionAction) {
+      setActions(prev => prev.map(a => 
+        a.id === pendingExceptionAction 
+          ? { ...a, status: 'Exception', justification: exceptionReason.trim() } 
+          : a
+      ));
+      toast.success('Task moved to Exception successfully.');
+    }
+    
+    setExceptionModalOpen(false);
+    setPendingExceptionAction(null);
+    setExceptionReason('');
+  };
+
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-secondary/10 h-full">
-      {/* Filters Header (Consistent with Threat Catalog) */}
+    <div className="flex-1 flex flex-col overflow-hidden bg-secondary/10 h-full relative">
+      {/* Filters Header */}
       <div className="p-5 border-b border-border/50 bg-card shadow-sm z-10 flex flex-col gap-4">
         <div className="flex justify-between items-center">
           <h3 className="font-bold text-lg flex items-center gap-2">
@@ -155,7 +226,12 @@ export const MitigationsTab = ({ threats }: { threats?: any[] }) => {
               const StatusIcon = statusObj.icon;
               
               return (
-                <div key={statusObj.id} className="flex flex-col w-[350px] bg-card/40 border border-border/50 rounded-3xl overflow-hidden shadow-sm">
+                <div 
+                  key={statusObj.id} 
+                  className="flex flex-col w-[380px] bg-card/40 border border-border/50 rounded-3xl overflow-hidden shadow-sm transition-colors"
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, statusObj.id)}
+                >
                   <div className="p-4 border-b border-border/50 bg-card flex justify-between items-center">
                     <h4 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2">
                       <StatusIcon className={`h-4 w-4 ${statusObj.color}`} />
@@ -167,44 +243,88 @@ export const MitigationsTab = ({ threats }: { threats?: any[] }) => {
                   </div>
                   
                   <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {columnActions.map(action => (
-                      <div key={action.id} className="bg-card border border-border/50 rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-grab active:cursor-grabbing group">
-                        <div className="flex justify-between items-start mb-3">
-                          <span className="text-[10px] font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">{action.id}</span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                            action.effort === 'High' ? 'bg-destructive/10 text-destructive border-destructive/20' :
-                            action.effort === 'Medium' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
-                            'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                          }`}>
-                            {action.effort} Effort
-                          </span>
-                        </div>
-                        
-                        <h5 className="font-bold text-sm mb-2 text-foreground leading-snug group-hover:text-primary transition-colors">{action.title}</h5>
-                        
-                        <div className="flex items-center gap-2 mb-4">
-                          <span className="text-[10px] font-medium text-muted-foreground bg-secondary/50 px-2 py-1 rounded-md border border-border/50">
-                            Fixes {action.threatId}
-                          </span>
-                          <span className="text-[10px] font-medium text-muted-foreground bg-secondary/50 px-2 py-1 rounded-md border border-border/50 truncate">
-                            {action.threatCategory}
-                          </span>
-                        </div>
-                        
-                        <div className="flex justify-between items-center mt-4 pt-3 border-t border-border/50">
-                          <div className="flex gap-1.5 flex-wrap">
-                            {action.controls.map(c => (
-                              <span key={c} className="bg-background border border-border/50 px-1.5 py-0.5 rounded text-[10px] font-bold text-muted-foreground">{c}</span>
-                            ))}
+                    {columnActions.map(action => {
+                      const isExpanded = expandedCards.has(action.id);
+                      
+                      return (
+                        <div 
+                          key={action.id} 
+                          className="bg-card border border-border/50 rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-grab active:cursor-grabbing group"
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, action.id)}
+                        >
+                          <div className="flex justify-between items-start mb-3">
+                            <span className="text-[10px] font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">{action.id}</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              action.effort === 'High' ? 'bg-destructive/10 text-destructive border-destructive/20' :
+                              action.effort === 'Medium' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                              'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                            }`}>
+                              {action.effort} Effort
+                            </span>
                           </div>
                           
-                          {/* Mock avatar for assignee */}
-                          <div className="h-6 w-6 rounded-full bg-secondary border border-border flex items-center justify-center text-[10px] font-bold text-muted-foreground">
-                            AI
+                          <h5 className="font-bold text-sm mb-2 text-foreground leading-snug group-hover:text-primary transition-colors">{action.title}</h5>
+                          
+                          <div className="flex items-center gap-2 mb-4">
+                            <span className="text-[10px] font-medium text-muted-foreground bg-secondary/50 px-2 py-1 rounded-md border border-border/50">
+                              Fixes {action.threatId}
+                            </span>
+                            <span className="text-[10px] font-medium text-muted-foreground bg-secondary/50 px-2 py-1 rounded-md border border-border/50 truncate max-w-[120px]" title={action.threatCategory}>
+                              {action.threatCategory}
+                            </span>
                           </div>
+
+                          <div className="flex justify-between items-center">
+                            <div className="flex gap-1.5 flex-wrap">
+                              {action.controls.map((c: string) => (
+                                <span key={c} className="bg-background border border-border/50 px-1.5 py-0.5 rounded text-[10px] font-bold text-muted-foreground">{c}</span>
+                              ))}
+                            </div>
+                            
+                            {/* Mock avatar for assignee */}
+                            <div className="h-6 w-6 rounded-full bg-secondary border border-border flex items-center justify-center text-[10px] font-bold text-muted-foreground flex-shrink-0">
+                              AI
+                            </div>
+                          </div>
+                          
+                          {/* Full Details Expansion */}
+                          <div className="mt-4 pt-3 border-t border-border/50">
+                            <button
+                              onClick={() => toggleExpand(action.id)}
+                              className="text-[11px] font-bold text-primary flex items-center justify-between w-full hover:underline"
+                            >
+                              <span>{isExpanded ? 'Hide Details' : 'View Full Details'}</span>
+                              {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                            </button>
+
+                            {isExpanded && (
+                              <div className="text-xs text-muted-foreground mt-3 space-y-3 bg-secondary/30 p-3 rounded-xl border border-border/50 cursor-text select-text" onDragStart={(e) => e.preventDefault()}>
+                                <div>
+                                  <span className="font-bold text-foreground block mb-1">Threat Context:</span>
+                                  <p className="leading-relaxed">{action.description}</p>
+                                </div>
+                                {action.reasoning && (
+                                  <div>
+                                    <span className="font-bold text-foreground block mb-1">Exploitation Risk:</span>
+                                    <p className="leading-relaxed">{action.reasoning}</p>
+                                  </div>
+                                )}
+                                {action.status === 'Exception' && action.justification && (
+                                  <div className="bg-orange-500/10 border border-orange-500/20 p-2.5 rounded-lg text-orange-600 dark:text-orange-400 mt-2">
+                                    <span className="font-bold block mb-1 flex items-center gap-1.5">
+                                      <AlertTriangle className="h-3 w-3" /> Approved Exception Justification:
+                                    </span>
+                                    <p>{action.justification}</p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {columnActions.length === 0 && (
                       <div className="text-center p-6 border-2 border-dashed border-border/50 rounded-2xl text-xs text-muted-foreground bg-card/30">
                         Drop tasks here
@@ -217,6 +337,48 @@ export const MitigationsTab = ({ threats }: { threats?: any[] }) => {
           </div>
         )}
       </div>
+
+      {/* Exception Justification Modal */}
+      {isExceptionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+          <div className="bg-card border border-border/50 rounded-3xl p-6 shadow-2xl w-full max-w-md animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-orange-500/10 text-orange-500 p-2 rounded-full">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <h3 className="text-lg font-bold">Exception Justification</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Moving a mitigation to an exception requires a formal business or technical justification. This will be recorded in the final compliance report.
+            </p>
+            <textarea
+              value={exceptionReason}
+              onChange={(e) => setExceptionReason(e.target.value)}
+              className="w-full h-32 bg-secondary/30 border border-border/50 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 resize-none mb-6"
+              placeholder="E.g., Legacy system constraint, risk accepted by management, compensating control already in place..."
+              autoFocus
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setExceptionModalOpen(false);
+                  setPendingExceptionAction(null);
+                  setExceptionReason('');
+                }}
+                className="px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-secondary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmException}
+                className="px-4 py-2.5 rounded-xl text-sm font-bold bg-orange-500 text-white hover:bg-orange-600 transition-colors shadow-sm"
+              >
+                Save Exception
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
