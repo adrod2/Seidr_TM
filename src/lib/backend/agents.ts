@@ -1,6 +1,10 @@
 import { hashInput, getCachedResult, setCachedResult } from './agentCache';
 import { SystemRepresentationGraph, Threat, ComplianceGap } from './types';
 import { callLLM } from './llmClient';
+import { tavily } from '@tavily/core';
+
+// Note: Ensure TAVILY_API_KEY is available in your environment variables
+const tvly = tavily({ apiKey: import.meta.env.VITE_TAVILY_API_KEY || 'tvly-mock-key' });
 
 /**
  * C4 Architecture Agent: Converts raw system descriptions into a highly structured C4 System Representation Graph (SRG).
@@ -115,6 +119,55 @@ Return ONLY a valid JSON array of objects with this EXACT structure:
   
   await setCachedResult('threatModeling', hash, threats);
   return threats;
+};
+
+/**
+ * Mitigation Agent: Searches the web and system context to generate tailored mitigation strategies for specific threats.
+ */
+export const agentMitigationStrategist = async (threat: Threat, systemContext: string): Promise<string> => {
+  const hash = await hashInput(`mitigation_${threat.id}_${systemContext}`);
+  const cached = await getCachedResult<string>('mitigationStrategy', hash);
+  if (cached) return cached;
+
+  let searchContext = '';
+  try {
+    // Perform a targeted web search for mitigation strategies based on the threat title and category
+    const searchResponse = await tvly.search(`How to mitigate ${threat.title} vulnerability ${threat.category} best practices technical implementation`);
+    searchContext = searchResponse.results.map(r => r.content).join('\n');
+  } catch (error) {
+    console.warn('Tavily search failed, falling back to LLM knowledge:', error);
+  }
+
+  const systemPrompt = `You are an expert Application Security Engineer specializing in actionable threat mitigation.
+Given a specific threat from a threat model and the broader system context, provide a highly tailored, step-by-step mitigation strategy.
+
+Context Rules:
+1. Ground your advice in the provided System Context (technologies, frameworks).
+2. Incorporate modern best practices, drawing from the provided Web Search Context if available.
+3. Be specific. Do not say "implement secure logging". Instead say "Configure your Node.js backend to use Winston for structured JSON logging, sending logs to AWS CloudWatch via an IAM role with restricted put-only permissions."
+
+Return ONLY a raw string (no markdown formatting, no JSON, just the text) containing the tailored mitigation plan. Keep it between 3 and 5 sentences.`;
+
+  const promptInput = `
+Threat Title: ${threat.title}
+Threat Category: ${threat.category}
+Component Affected: ${threat.componentId}
+Threat Description: ${threat.description}
+
+System Architecture Context:
+${systemContext}
+
+Recent Web Research on Mitigation:
+${searchContext}
+  `;
+
+  const result = await callLLM(systemPrompt, promptInput);
+  
+  // Clean up any potential JSON quotes if the LLM hallucinated them
+  const cleanedResult = typeof result === 'string' ? result.replace(/^["']|["']$/g, '') : JSON.stringify(result);
+  
+  await setCachedResult('mitigationStrategy', hash, cleanedResult);
+  return cleanedResult;
 };
 
 /**

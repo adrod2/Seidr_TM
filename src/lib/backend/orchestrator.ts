@@ -1,5 +1,5 @@
 import { runSecurityPipeline } from './securityPipeline';
-import { agentC4Architect, agentThreatModeling, agentCompliance, agentRepositoryAnalysis } from './agents';
+import { agentC4Architect, agentThreatModeling, agentCompliance, agentRepositoryAnalysis, agentMitigationStrategist } from './agents';
 import { db } from '../db';
 import { Threat } from './types';
 
@@ -64,12 +64,23 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     const archThreats = await agentThreatModeling(srg, framework);
     
     // Combine architecture threats and SAST repo threats
-    const allThreats = [...archThreats, ...repoThreats].sort((a, b) => b.cvssScore - a.cvssScore);
+    let allThreats = [...archThreats, ...repoThreats].sort((a, b) => b.cvssScore - a.cvssScore);
 
     onProgress(5);
-    const complianceGaps = await agentCompliance(allThreats);
+    
+    // Generate tailored mitigations for the top threats (limit to top 10 to manage API latency/costs)
+    const topThreatsToMitigate = allThreats.slice(0, 10);
+    const mitigationPromises = topThreatsToMitigate.map(threat => 
+      agentMitigationStrategist(threat, finalInput)
+        .then(strategy => { threat.mitigation = strategy; })
+        .catch(err => { console.warn(`Failed to generate mitigation for ${threat.id}`, err); })
+    );
+    await Promise.all(mitigationPromises);
 
     onProgress(6);
+    const complianceGaps = await agentCompliance(allThreats);
+
+    onProgress(7);
     
     const avgScore = allThreats.length > 0 ? allThreats.reduce((acc, t) => acc + t.cvssScore, 0) / allThreats.length : 0;
     
