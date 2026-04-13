@@ -101,10 +101,10 @@ const C4ArchitectureContent = ({ srg, modelId }: { srg?: any, modelId?: string }
         const layerIdx = positionCounters[c4Type] || 0;
         let y = 250;
         if (c4Type === 'Person') y = 50;
-        else if (c4Type === 'Database') y = 450;
-        else if (c4Type === 'Component') y = 350;
+        else if (c4Type === 'Database') y = 500;
+        else if (c4Type === 'Component') y = 380;
 
-        pos = { x: 100 + (layerIdx * 280), y };
+        pos = { x: 100 + (layerIdx * 320), y };
         positionCounters[c4Type] = layerIdx + 1;
       }
 
@@ -134,7 +134,13 @@ const C4ArchitectureContent = ({ srg, modelId }: { srg?: any, modelId?: string }
 
     setNodes(newNodes);
     setEdges(newEdges);
-  }, [draftSrg, activeLevel, setNodes, setEdges]);
+
+    // Ensure we trigger fitView after nodes are processed and rendered
+    setTimeout(() => {
+      fitView({ padding: 0.3, duration: 800 });
+    }, 100);
+
+  }, [draftSrg, activeLevel, setNodes, setEdges, fitView]);
 
   // Handle Dragging (sync back to draftSrg)
   const onNodesChangeHandler = useCallback(
