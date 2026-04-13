@@ -1,10 +1,8 @@
 import { hashInput, getCachedResult, setCachedResult } from './agentCache';
 import { SystemRepresentationGraph, Threat, ComplianceGap } from './types';
 import { callLLM } from './llmClient';
-import { tavily } from '@tavily/core';
-
-// Note: Ensure TAVILY_API_KEY is available in your environment variables
-const tvly = tavily({ apiKey: import.meta.env.VITE_TAVILY_API_KEY || 'tvly-mock-key' });
+// Removed @tavily/core import due to browser compatibility issues with agent-base.
+// We will use the native fetch API directly.
 
 /**
  * C4 Architecture Agent: Converts raw system descriptions into a highly structured C4 System Representation Graph (SRG).
@@ -132,8 +130,34 @@ export const agentMitigationStrategist = async (threat: Threat, systemContext: s
   let searchContext = '';
   try {
     // Perform a targeted web search for mitigation strategies based on the threat title and category
-    const searchResponse = await tvly.search(`How to mitigate ${threat.title} vulnerability ${threat.category} best practices technical implementation`);
-    searchContext = searchResponse.results.map(r => r.content).join('\n');
+    // Using native fetch instead of the Node.js SDK to avoid browser compatibility issues (agent-base)
+    const apiKey = import.meta.env.VITE_TAVILY_API_KEY;
+    if (apiKey) {
+      const response = await fetch('https://api.tavily.com/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          query: `How to mitigate ${threat.title} vulnerability ${threat.category} best practices technical implementation`,
+          search_depth: 'basic',
+          include_answer: false,
+          include_images: false,
+          include_raw_content: false,
+          max_results: 3
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        searchContext = data.results?.map((r: any) => r.content).join('\n') || '';
+      } else {
+        console.warn('Tavily API returned an error:', await response.text());
+      }
+    } else {
+      console.warn('Tavily API key not found, skipping web search.');
+    }
   } catch (error) {
     console.warn('Tavily search failed, falling back to LLM knowledge:', error);
   }
