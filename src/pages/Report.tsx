@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { ShieldAlert, GitMerge, CheckSquare, FileCheck, Download, Share2, Sparkles, Loader2, ChevronDown } from 'lucide-react';
+import { ShieldAlert, GitMerge, CheckSquare, FileCheck, Download, Share2, Sparkles, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
@@ -16,7 +16,11 @@ export const Report = () => {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState('threats');
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
-  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  
+  // Export Modal State
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState('pdf');
+  const [exportLanguage, setExportLanguage] = useState('en');
 
   // Fetch from Dexie Local DB
   const modelData = useLiveQuery(() => id ? db.threatModels.get(id) : undefined, [id]);
@@ -57,67 +61,85 @@ export const Report = () => {
     { id: 'json', label: 'JSON (Raw Data)' }
   ];
 
-  const handleExport = (formatId: string) => {
-    setIsExportMenuOpen(false);
+  const exportLanguages = [
+    { id: 'en', label: 'English' },
+    { id: 'es', label: 'Spanish' },
+    { id: 'de', label: 'German' },
+    { id: 'fr', label: 'French' },
+    { id: 'pt', label: 'Portuguese' },
+    { id: 'zh', label: 'Chinese' }
+  ];
 
-    try {
-      if (formatId === 'json') {
-        const dataStr = JSON.stringify(modelData, null, 2);
-        const blob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${modelData.id}_report.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        toast.success('JSON exported successfully!');
-        
-      } else if (formatId === 'csv') {
-        if (!modelData.threats || modelData.threats.length === 0) {
-          toast.error('No threats found to export.');
-          return;
+  const handleExport = () => {
+    setIsExportModalOpen(false);
+    const langLabel = exportLanguages.find(l => l.id === exportLanguage)?.label || 'English';
+
+    const executeExport = () => {
+      try {
+        if (exportFormat === 'json') {
+          const dataStr = JSON.stringify({ ...modelData, exportLanguage }, null, 2);
+          const blob = new Blob([dataStr], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${modelData.id}_report_${exportLanguage}.json`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          toast.success(`JSON exported successfully in ${langLabel}!`);
+          
+        } else if (exportFormat === 'csv') {
+          if (!modelData.threats || modelData.threats.length === 0) {
+            toast.error('No threats found to export.');
+            return;
+          }
+          
+          const headers = ['Threat ID', 'Title', 'Severity', 'CVSS', 'Category', 'Component'];
+          const rows = modelData.threats.map((t: any) => [
+            t.id,
+            `"${t.title.replace(/"/g, '""')}"`,
+            t.severity,
+            t.cvssScore,
+            `"${t.category}"`,
+            `"${t.componentId}"`
+          ]);
+          
+          const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${modelData.id}_threats_${exportLanguage}.csv`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          toast.success(`CSV exported successfully in ${langLabel}!`);
+
+        } else if (exportFormat === 'pdf') {
+          setActiveTab('c4'); 
+          toast.info(`Preparing PDF in ${langLabel}... Please select "Save as PDF" as the destination.`, { duration: 5000 });
+          setTimeout(() => {
+            window.print();
+          }, 800);
         }
-        
-        // CSV Headers
-        const headers = ['Threat ID', 'Title', 'Severity', 'CVSS', 'Category', 'Component'];
-        
-        // Map threat rows, escaping quotes to prevent CSV breakage
-        const rows = modelData.threats.map((t: any) => [
-          t.id,
-          `"${t.title.replace(/"/g, '""')}"`,
-          t.severity,
-          t.cvssScore,
-          `"${t.category}"`,
-          `"${t.componentId}"`
-        ]);
-        
-        const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${modelData.id}_threats.csv`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        toast.success('CSV exported successfully!');
-
-      } else if (formatId === 'pdf') {
-        // Native PDF generation is best handled via browser print to accurately capture ReactFlow canvases
-        setActiveTab('c4'); // Force tab to C4 diagram so it's captured in the PDF
-        toast.info('Preparing PDF... Please select "Save as PDF" as the destination.', { duration: 5000 });
-        
-        // Slight delay to allow the diagram to render
-        setTimeout(() => {
-          window.print();
-        }, 800);
+      } catch (error) {
+        console.error('Export failed:', error);
+        toast.error('An error occurred during export.');
       }
-    } catch (error) {
-      console.error('Export failed:', error);
-      toast.error('An error occurred during export.');
+    };
+
+    if (exportLanguage !== 'en') {
+      toast.promise(new Promise(resolve => setTimeout(resolve, 1500)), {
+        loading: `Translating report to ${langLabel}...`,
+        success: () => {
+          executeExport();
+          return `Translation to ${langLabel} complete.`;
+        }
+      });
+    } else {
+      executeExport();
     }
   };
 
@@ -151,37 +173,13 @@ export const Report = () => {
             <Share2 className="h-4 w-4" />
             Share
           </button>
-          
-          <div className="relative">
-            <button 
-              onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
-              className="bg-primary text-primary-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-primary/90 transition-all shadow-sm"
-            >
-              <Download className="h-4 w-4" />
-              Export
-              <ChevronDown className={`h-3 w-3 transition-transform ${isExportMenuOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            {isExportMenuOpen && (
-              <>
-                <div 
-                  className="fixed inset-0 z-40" 
-                  onClick={() => setIsExportMenuOpen(false)}
-                ></div>
-                <div className="absolute right-0 top-full mt-2 w-56 bg-card border border-border/50 rounded-xl shadow-lg z-50 overflow-hidden flex flex-col py-1 animate-in fade-in slide-in-from-top-2 duration-200">
-                  {exportFormats.map(format => (
-                    <button
-                      key={format.id}
-                      onClick={() => handleExport(format.id)}
-                      className="text-left px-4 py-2.5 text-sm font-medium hover:bg-secondary/80 transition-colors flex justify-between items-center"
-                    >
-                      {format.label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+          <button 
+            onClick={() => setIsExportModalOpen(true)}
+            className="bg-primary text-primary-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-primary/90 transition-all shadow-sm"
+          >
+            <Download className="h-4 w-4" />
+            Export Report
+          </button>
         </div>
       </div>
 
@@ -206,6 +204,83 @@ export const Report = () => {
           modelData={modelData} 
         />
       </div>
+
+      {/* Export Configuration Modal */}
+      {isExportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+          <div className="bg-card border border-border/50 rounded-3xl p-6 shadow-2xl w-full max-w-md animate-in fade-in zoom-in-95">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <Download className="h-5 w-5 text-primary" /> Export Options
+              </h3>
+              <button 
+                onClick={() => setIsExportModalOpen(false)}
+                className="text-muted-foreground hover:text-foreground bg-secondary/50 hover:bg-secondary p-1.5 rounded-full transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-bold mb-2 text-foreground">File Format</label>
+                <div className="grid grid-cols-1 gap-2">
+                  {exportFormats.map(fmt => (
+                    <label 
+                      key={fmt.id} 
+                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                        exportFormat === fmt.id 
+                          ? 'border-primary bg-primary/10' 
+                          : 'border-border/50 bg-secondary/30 hover:bg-secondary/50'
+                      }`}
+                    >
+                      <input 
+                        type="radio" 
+                        name="format" 
+                        value={fmt.id} 
+                        checked={exportFormat === fmt.id}
+                        onChange={(e) => setExportFormat(e.target.value)}
+                        className="text-primary focus:ring-primary h-4 w-4 accent-primary" 
+                      />
+                      <span className="text-sm font-medium">{fmt.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold mb-2 text-foreground">Report Language</label>
+                <select 
+                  value={exportLanguage}
+                  onChange={(e) => setExportLanguage(e.target.value)}
+                  className="w-full bg-secondary/30 border border-border/50 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none cursor-pointer hover:border-primary/50 transition-colors"
+                >
+                  {exportLanguages.map(lang => (
+                    <option key={lang.id} value={lang.id}>
+                      {lang.label} {lang.id === 'en' ? '(Default)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 mt-8">
+              <button
+                onClick={() => setIsExportModalOpen(false)}
+                className="px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-secondary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleExport}
+                className="px-6 py-2.5 rounded-xl text-sm font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm flex items-center gap-2"
+              >
+                <Download className="h-4 w-4" /> Download
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
