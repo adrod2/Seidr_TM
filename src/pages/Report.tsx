@@ -51,20 +51,74 @@ export const Report = () => {
   const riskBadge = getRiskLevel(modelData.riskScore);
   const formattedDate = new Date(modelData.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-  const exportLanguages = [
-    { id: 'en', label: 'English' },
-    { id: 'es', label: 'Spanish' },
-    { id: 'de', label: 'German' },
-    { id: 'pt', label: 'Portuguese' },
-    { id: 'zh', label: 'Chinese' }
+  const exportFormats = [
+    { id: 'pdf', label: 'PDF (Includes Diagram)' },
+    { id: 'csv', label: 'CSV (Threats Table)' },
+    { id: 'json', label: 'JSON (Raw Data)' }
   ];
 
-  const handleExport = (language: string) => {
+  const handleExport = (formatId: string) => {
     setIsExportMenuOpen(false);
-    toast.promise(new Promise(r => setTimeout(r, 2000)), { 
-      loading: `Generating PDF (${language})...`, 
-      success: `Report exported successfully in ${language}!` 
-    });
+
+    try {
+      if (formatId === 'json') {
+        const dataStr = JSON.stringify(modelData, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${modelData.id}_report.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        toast.success('JSON exported successfully!');
+        
+      } else if (formatId === 'csv') {
+        if (!modelData.threats || modelData.threats.length === 0) {
+          toast.error('No threats found to export.');
+          return;
+        }
+        
+        // CSV Headers
+        const headers = ['Threat ID', 'Title', 'Severity', 'CVSS', 'Category', 'Component'];
+        
+        // Map threat rows, escaping quotes to prevent CSV breakage
+        const rows = modelData.threats.map((t: any) => [
+          t.id,
+          `"${t.title.replace(/"/g, '""')}"`,
+          t.severity,
+          t.cvssScore,
+          `"${t.category}"`,
+          `"${t.componentId}"`
+        ]);
+        
+        const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${modelData.id}_threats.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        toast.success('CSV exported successfully!');
+
+      } else if (formatId === 'pdf') {
+        // Native PDF generation is best handled via browser print to accurately capture ReactFlow canvases
+        setActiveTab('c4'); // Force tab to C4 diagram so it's captured in the PDF
+        toast.info('Preparing PDF... Please select "Save as PDF" as the destination.', { duration: 5000 });
+        
+        // Slight delay to allow the diagram to render
+        setTimeout(() => {
+          window.print();
+        }, 800);
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast.error('An error occurred during export.');
+    }
   };
 
   return (
@@ -114,15 +168,14 @@ export const Report = () => {
                   className="fixed inset-0 z-40" 
                   onClick={() => setIsExportMenuOpen(false)}
                 ></div>
-                <div className="absolute right-0 top-full mt-2 w-40 bg-card border border-border/50 rounded-xl shadow-lg z-50 overflow-hidden flex flex-col py-1 animate-in fade-in slide-in-from-top-2 duration-200">
-                  {exportLanguages.map(lang => (
+                <div className="absolute right-0 top-full mt-2 w-56 bg-card border border-border/50 rounded-xl shadow-lg z-50 overflow-hidden flex flex-col py-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                  {exportFormats.map(format => (
                     <button
-                      key={lang.id}
-                      onClick={() => handleExport(lang.label)}
+                      key={format.id}
+                      onClick={() => handleExport(format.id)}
                       className="text-left px-4 py-2.5 text-sm font-medium hover:bg-secondary/80 transition-colors flex justify-between items-center"
                     >
-                      {lang.label}
-                      {lang.id === 'en' && <span className="text-[10px] bg-secondary border border-border/50 px-1.5 py-0.5 rounded text-muted-foreground">Default</span>}
+                      {format.label}
                     </button>
                   ))}
                 </div>
