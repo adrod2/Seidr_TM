@@ -1,8 +1,6 @@
 import { hashInput, getCachedResult, setCachedResult } from './agentCache';
 import { SystemRepresentationGraph, Threat, ComplianceGap } from './types';
 import { callLLM } from './llmClient';
-// Removed @tavily/core import due to browser compatibility issues with agent-base.
-// We will use the native fetch API directly.
 
 /**
  * C4 Architecture Agent: Converts raw system descriptions into a highly structured C4 System Representation Graph (SRG).
@@ -129,8 +127,6 @@ export const agentMitigationStrategist = async (threat: Threat, systemContext: s
 
   let searchContext = '';
   try {
-    // Perform a targeted web search for mitigation strategies based on the threat title and category
-    // Using native fetch instead of the Node.js SDK to avoid browser compatibility issues (agent-base)
     const apiKey = import.meta.env.VITE_TAVILY_API_KEY;
     if (apiKey) {
       const response = await fetch('https://api.tavily.com/search', {
@@ -187,7 +183,6 @@ ${searchContext}
 
   const result = await callLLM(systemPrompt, promptInput);
   
-  // Clean up any potential JSON quotes if the LLM hallucinated them
   const cleanedResult = typeof result === 'string' ? result.replace(/^["']|["']$/g, '') : JSON.stringify(result);
   
   await setCachedResult('mitigationStrategy', hash, cleanedResult);
@@ -212,4 +207,79 @@ Return ONLY a valid JSON array of objects with this EXACT structure:
   const gapsData = await callLLM(systemPrompt, `Identified Threats:\n${JSON.stringify(threats.map(t => ({ id: t.id, title: t.title, component: t.componentId })), null, 2)}`);
   
   return gapsData as ComplianceGap[];
+};
+
+/**
+ * Translation Agent: Translates the threat report to a target language.
+ */
+export const agentTranslateReport = async (modelData: any, targetLanguage: string): Promise<any> => {
+  const hash = await hashInput(`translate_${modelData.id}_${targetLanguage}`);
+  const cached = await getCachedResult<any>('translation', hash);
+  if (cached) return cached;
+
+  const payload = {
+    name: modelData.name,
+    threats: modelData.threats?.map((t: any) => ({
+      id: t.id,
+      title: t.title,
+      description: t.description,
+      category: t.category,
+      reasoning: t.reasoning,
+      mitigation: t.mitigation,
+      severity: t.severity
+    })),
+    complianceGaps: modelData.complianceGaps?.map((c: any) => ({
+      controlId: c.controlId,
+      title: c.title,
+      status: c.status,
+      description: c.description
+    })),
+    uiStrings: {
+      reportTitle: "Threat Model Report",
+      systemName: "System Name",
+      modelId: "Model ID",
+      dateGenerated: "Date Generated",
+      framework: "Framework",
+      riskScore: "Risk Score",
+      identifiedThreats: "Identified Threats & Mitigations",
+      noThreats: "No threats identified.",
+      description: "Description",
+      exploitationPath: "Exploitation Path",
+      suggestedMitigation: "Suggested Mitigation Action",
+      noMitigation: "No specific mitigation provided.",
+      complianceGaps: "Compliance Gaps (NIST SP 800-53)",
+      noGaps: "No critical compliance gaps identified. All mapped controls are met.",
+      controlId: "Control ID",
+      title: "Title",
+      status: "Status",
+      details: "Details"
+    }
+  };
+
+  const systemPrompt = `You are a professional cybersecurity translator. Translate ALL string values in the following JSON payload into ${targetLanguage}.
+  CRITICAL INSTRUCTIONS:
+  1. ONLY translate the string values (the right side of the key-value pairs).
+  2. DO NOT change ANY JSON keys (e.g., keep "uiStrings", "description", "title", "id" exactly as they are).
+  3. Keep cybersecurity technical terms accurate and natural in ${targetLanguage}.
+  4. Return ONLY a valid JSON object matching the exact structure of the input.`;
+
+  const result = await callLLM(systemPrompt, JSON.stringify(payload, null, 2));
+
+  // Merge translations back to preserve non-translated fields (like raw numeric scores or original IDs)
+  const translatedData = {
+    ...modelData,
+    name: result.name || modelData.name,
+    uiStrings: result.uiStrings,
+    threats: modelData.threats?.map((t: any) => {
+      const trans = result.threats?.find((rt: any) => rt.id === t.id) || {};
+      return { ...t, ...trans };
+    }),
+    complianceGaps: modelData.complianceGaps?.map((c: any) => {
+      const trans = result.complianceGaps?.find((rc: any) => rc.controlId === c.controlId) || {};
+      return { ...c, ...trans };
+    })
+  };
+
+  await setCachedResult('translation', hash, translatedData);
+  return translatedData;
 };

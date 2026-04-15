@@ -14,6 +14,7 @@ import { ComplianceTab } from '@/components/report/ComplianceTab';
 import { CopilotSidebar } from '@/components/report/CopilotSidebar';
 import { PrintReport } from '@/components/report/PrintReport';
 import { TabButton } from '@/components/TabButton';
+import { agentTranslateReport } from '@/lib/backend/agents';
 
 export const Report = () => {
   const { id } = useParams();
@@ -24,6 +25,9 @@ export const Report = () => {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState('pdf');
   const [exportLanguage, setExportLanguage] = useState('en');
+  
+  // State for the translated data passed to the PrintReport component
+  const [translatedPrintData, setTranslatedPrintData] = useState<any>(null);
 
   // Fetch from Dexie Local DB
   const modelData = useLiveQuery(() => id ? db.threatModels.get(id) : undefined, [id]);
@@ -77,10 +81,17 @@ export const Report = () => {
     setIsExportModalOpen(false);
     const langLabel = exportLanguages.find(l => l.id === exportLanguage)?.label || 'English';
 
-    const executeExport = () => {
+    const performExport = async () => {
       try {
+        let dataToExport = modelData;
+
+        // Execute translation if necessary
+        if (exportLanguage !== 'en') {
+          dataToExport = await agentTranslateReport(modelData, langLabel);
+        }
+
         if (exportFormat === 'json') {
-          const dataStr = JSON.stringify({ ...modelData, exportLanguage }, null, 2);
+          const dataStr = JSON.stringify({ ...dataToExport, exportLanguage }, null, 2);
           const blob = new Blob([dataStr], { type: 'application/json' });
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
@@ -93,13 +104,13 @@ export const Report = () => {
           toast.success(`JSON exported successfully in ${langLabel}!`);
           
         } else if (exportFormat === 'csv') {
-          if (!modelData.threats || modelData.threats.length === 0) {
+          if (!dataToExport.threats || dataToExport.threats.length === 0) {
             toast.error('No threats found to export.');
             return;
           }
           
           const headers = ['Threat ID', 'Title', 'Severity', 'CVSS', 'Category', 'Component'];
-          const rows = modelData.threats.map((t: any) => [
+          const rows = dataToExport.threats.map((t: any) => [
             t.id,
             `"${t.title.replace(/"/g, '""')}"`,
             t.severity,
@@ -121,27 +132,30 @@ export const Report = () => {
           toast.success(`CSV exported successfully in ${langLabel}!`);
 
         } else if (exportFormat === 'pdf') {
-          toast.info(`Preparing PDF in ${langLabel}... Please select "Save as PDF" as the destination.`, { duration: 5000 });
+          // Set the data for the Print component and wait a tick for React to render it
+          setTranslatedPrintData(dataToExport);
+          
           setTimeout(() => {
             window.print();
-          }, 800);
+          }, 500);
         }
       } catch (error) {
         console.error('Export failed:', error);
-        toast.error('An error occurred during export.');
+        throw error; // Let the toast.promise catch it
       }
     };
 
     if (exportLanguage !== 'en') {
-      toast.promise(new Promise(resolve => setTimeout(resolve, 1500)), {
-        loading: `Translating report to ${langLabel}...`,
-        success: () => {
-          executeExport();
-          return `Translation to ${langLabel} complete.`;
-        }
+      toast.promise(performExport(), {
+        loading: `Translating report to ${langLabel} (this may take a moment)...`,
+        success: `Translation complete. Preparing ${exportFormat.toUpperCase()}.`,
+        error: 'Failed to translate report. Check AI configuration.'
       });
     } else {
-      executeExport();
+      if (exportFormat === 'pdf') {
+        toast.info(`Preparing PDF... Please select "Save as PDF" as the destination.`, { duration: 4000 });
+      }
+      performExport();
     }
   };
 
@@ -285,7 +299,7 @@ export const Report = () => {
           </div>
         )}
       </div>
-      <PrintReport modelData={modelData} />
+      <PrintReport modelData={translatedPrintData || modelData} />
     </>
   );
 };
