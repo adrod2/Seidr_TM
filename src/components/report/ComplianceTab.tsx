@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { Loader2, Briefcase, FileCheck, ShieldAlert } from 'lucide-react';
@@ -9,19 +9,44 @@ const defaultGaps = [
 
 export const ComplianceTab = ({ gaps }: { gaps?: any[] }) => {
   const displayGaps = gaps && gaps.length > 0 ? gaps : defaultGaps;
-  const gapsCount = displayGaps.filter(g => g.status === 'Gap Identified').length;
+  // Consider both Gap Identified and Partially Met as missing the mark for a full pass
+  const gapsCount = displayGaps.filter(g => g.status === 'Gap Identified' || g.status === 'Partially Met').length;
 
   const businessRisks = useLiveQuery(() => db.businessRisks.toArray());
+  const documents = useLiveQuery(() => db.documents.toArray());
+
+  // Dynamically calculate score based on the MMapp controls.csv file from the knowledge base
+  const { totalMandatory, metControls, complianceScore } = useMemo(() => {
+    let total = 50; // Fallback default if file is missing
+    
+    if (documents) {
+      const mmappDoc = documents.find(d => d.name.toLowerCase().includes('mmapp controls.csv'));
+      if (mmappDoc && mmappDoc.content) {
+        // Split by lines and remove empty ones
+        const rows = mmappDoc.content.split('\n').filter(line => line.trim().length > 0);
+        if (rows.length > 1) {
+          total = rows.length - 1; // Exclude the header row
+        } else if (rows.length === 1) {
+          total = 1;
+        }
+      }
+    }
+    
+    const met = Math.max(0, total - gapsCount);
+    const score = total > 0 ? Math.round((met / total) * 100) : 0;
+    
+    return { totalMandatory: total, metControls: met, complianceScore: score };
+  }, [documents, gapsCount]);
 
   return (
     <div className="flex-1 overflow-y-auto p-6 h-full bg-secondary/10">
       <div className="grid grid-cols-3 gap-6 mb-8">
         <div className="bg-card p-6 rounded-3xl border border-border/50 text-center shadow-sm">
-          <div className="text-5xl font-bold text-primary mb-2">92%</div>
+          <div className="text-5xl font-bold text-primary mb-2">{complianceScore}%</div>
           <div className="text-sm font-medium text-muted-foreground">Overall Compliance Score</div>
         </div>
         <div className="bg-card p-6 rounded-3xl border border-border/50 text-center shadow-sm">
-          <div className="text-5xl font-bold text-emerald-500 mb-2">45/50</div>
+          <div className="text-5xl font-bold text-emerald-500 mb-2">{metControls}/{totalMandatory}</div>
           <div className="text-sm font-medium text-muted-foreground">Mandatory Controls Met</div>
         </div>
         <div className={`p-6 rounded-3xl border text-center shadow-sm ${gapsCount > 0 ? 'bg-destructive/5 border-destructive/20' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
