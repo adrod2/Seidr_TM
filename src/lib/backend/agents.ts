@@ -19,7 +19,7 @@ Given the comprehensive system context, extract MAXIMUM details to build Level 1
 
 CRITICAL INSTRUCTION FOR DESCRIPTIONS:
 The "description" field for EVERY component MUST contain actual, real data from the input. DO NOT use generic phrases like "A database" or "A frontend". 
-Instead, specify exactly what it does, the precise technologies used (e.g., AWS, PostgreSQL, React, Auth0), and the specific data it processes based on the provided context. If a technology is not specified, infer its purpose precisely from the context.
+Instead, specify exactly what it does, the precise technologies used (e.g., AWS, PostgreSQL, React, Auth0), and the specific data it processes based on the provided context. If a technology is not specified, infer its purpose precisely from the context and mark it as "Infered".
 
 Rules for 'c4Level': 
 - Use 'Global' for Persons/External Systems that appear across all levels.
