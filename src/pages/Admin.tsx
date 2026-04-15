@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
-import { Users, Shield, Database, Settings2, BrainCircuit, HardDrive } from 'lucide-react';
+import { Users, Shield, Database, Settings2, BrainCircuit, HardDrive, LayoutDashboard } from 'lucide-react';
 import { AiConfigTab } from '../components/admin/AiConfigTab';
 import { RiskContextTab } from '../components/admin/RiskContextTab';
 import { SystemContextTab } from '../components/admin/SystemContextTab';
 import { UserManagementTab } from '../components/admin/UserManagementTab';
 import { IntegrationsTab } from '../components/admin/IntegrationsTab';
 import { DataManagementTab } from '../components/admin/DataManagementTab';
+import { Dashboard } from './Dashboard';
 import { TabButton } from '../components/TabButton';
 
 export const Admin = () => {
-  const [activeTab, setActiveTab] = useState('ai-config');
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
@@ -19,6 +20,7 @@ export const Admin = () => {
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none shrink-0 mb-4">
+        <TabButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={LayoutDashboard} label="Dashboard" />
         <TabButton active={activeTab === 'ai-config'} onClick={() => setActiveTab('ai-config')} icon={BrainCircuit} label="AI Models" />
         <TabButton active={activeTab === 'risk'} onClick={() => setActiveTab('risk')} icon={Shield} label="Risk Context" />
         <TabButton active={activeTab === 'system'} onClick={() => setActiveTab('system')} icon={Database} label="System Context" />
@@ -28,6 +30,7 @@ export const Admin = () => {
       </div>
 
       <div className="bg-card border border-border/50 rounded-3xl shadow-sm flex-1 overflow-y-auto p-6">
+        {activeTab === 'dashboard' && <Dashboard />}
         {activeTab === 'ai-config' && <AiConfigTab />}
         {activeTab === 'risk' && <RiskContextTab />}
         {activeTab === 'system' && <SystemContextTab />}

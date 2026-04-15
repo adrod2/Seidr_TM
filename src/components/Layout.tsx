@@ -4,7 +4,6 @@ import React from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { 
   ShieldAlert, 
-  LayoutDashboard, 
   PlusCircle, 
   List, 
   Settings,
@@ -17,8 +16,7 @@ import { ThemeToggle } from './ThemeToggle';
 
 const Sidebar = () => {
   const navItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-    { icon: BookOpen, label: 'Instructions', path: '/instructions' },
+    { icon: BookOpen, label: 'Instructions', path: '/' },
     { icon: PlusCircle, label: 'New Model', path: '/models/new' },
     { icon: List, label: 'Threat Models', path: '/models' },
     { icon: Settings, label: 'Administration', path: '/admin' },
@@ -38,11 +36,12 @@ const Sidebar = () => {
             to={item.path}
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
-                isActive 
+                isActive && (item.path === '/' ? location.pathname === '/' : true)
                   ? 'bg-primary/10 text-primary font-medium' 
                   : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
               }`
             }
+            end={item.path === '/'}
           >
             <item.icon className="h-5 w-5" />
             {item.label}
@@ -70,8 +69,7 @@ const Header = () => {
   
   const getTitle = () => {
     const path = location.pathname;
-    if (path === '/') return 'Executive Dashboard';
-    if (path === '/instructions') return 'Instructions & Guide';
+    if (path === '/') return 'Instructions & Guide';
     if (path.startsWith('/models/new')) return 'New Threat Model';
     if (path.startsWith('/models/') && path !== '/models') return 'Threat Report';
     if (path === '/models') return 'Threat Models';

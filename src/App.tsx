@@ -1,6 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import { Dashboard } from './pages/Dashboard';
 import { NewModel } from './pages/NewModel';
 import { ModelsList } from './pages/ModelsList';
 import { Report } from './pages/Report';
@@ -15,8 +14,7 @@ function App() {
       <Router>
         <Routes>
           <Route path="/" element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="instructions" element={<Instructions />} />
+            <Route index element={<Instructions />} />
             <Route path="models" element={<ModelsList />} />
             <Route path="models/new" element={<NewModel />} />
             <Route path="models/:id" element={<Report />} />
