@@ -10,7 +10,11 @@ import {
   Menu,
   Bell,
   Search,
-  BookOpen
+  BookOpen,
+  Check,
+  CheckCircle2,
+  AlertTriangle,
+  Info
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -75,11 +79,26 @@ const Header = () => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
-  // Close search dropdown when clicking outside
+  // Notifications State
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+  
+  const [notifications, setNotifications] = useState([
+    { id: 1, title: 'Analysis Complete', message: 'Threat model generation for Payment Gateway API finished successfully.', time: '5m ago', unread: true, type: 'success' },
+    { id: 2, title: 'Jira Sync Successful', message: '12 mitigation tasks have been pushed to Jira.', time: '1h ago', unread: true, type: 'info' },
+    { id: 3, title: 'High Risk Alert', message: 'A Critical severity threat was found in Core Database.', time: '2h ago', unread: false, type: 'warning' }
+  ]);
+
+  const unreadCount = notifications.filter(n => n.unread).length;
+
+  // Handle clicking outside of dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
         setIsSearchOpen(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setIsNotifOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -113,6 +132,10 @@ const Header = () => {
     setIsSearchOpen(false);
     setSearchQuery('');
     navigate(`/models/${id}`);
+  };
+
+  const markAllAsRead = () => {
+    setNotifications(notifications.map(n => ({ ...n, unread: false })));
   };
 
   return (
@@ -178,10 +201,64 @@ const Header = () => {
         </div>
         
         <ThemeToggle />
-        <button className="p-2 text-muted-foreground hover:bg-secondary/50 rounded-full transition-colors relative">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full border-2 border-background bg-destructive"></span>
-        </button>
+        
+        <div className="relative" ref={notifRef}>
+          <button 
+            onClick={() => setIsNotifOpen(!isNotifOpen)}
+            className={`p-2 rounded-full transition-colors relative ${isNotifOpen ? 'bg-secondary/80 text-foreground' : 'text-muted-foreground hover:bg-secondary/50'}`}
+          >
+            <Bell className="h-5 w-5" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-destructive"></span>
+            )}
+          </button>
+
+          {isNotifOpen && (
+            <div className="absolute right-0 top-full mt-2 w-80 bg-card border border-border/50 rounded-3xl shadow-xl overflow-hidden z-50">
+              <div className="p-4 border-b border-border/50 flex justify-between items-center bg-secondary/30">
+                <h3 className="font-bold text-sm">Notifications <span className="ml-1 text-xs text-muted-foreground font-normal">({unreadCount} unread)</span></h3>
+                {unreadCount > 0 && (
+                  <button onClick={markAllAsRead} className="text-xs font-bold text-primary hover:underline flex items-center gap-1">
+                    <Check className="h-3.5 w-3.5" /> Mark all read
+                  </button>
+                )}
+              </div>
+              <div className="max-h-80 overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <div className="p-6 text-center text-sm text-muted-foreground">You're all caught up!</div>
+                ) : (
+                  <div className="flex flex-col">
+                    {notifications.map(n => (
+                      <div 
+                        key={n.id} 
+                        className={`p-4 border-b border-border/50 last:border-0 hover:bg-secondary/20 transition-colors flex gap-3 ${n.unread ? 'bg-primary/5' : ''}`}
+                      >
+                        <div className="mt-0.5 flex-shrink-0">
+                          {n.type === 'success' && <CheckCircle2 className="h-5 w-5 text-emerald-500" />}
+                          {n.type === 'warning' && <AlertTriangle className="h-5 w-5 text-amber-500" />}
+                          {n.type === 'info' && <Info className="h-5 w-5 text-blue-500" />}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex justify-between items-start gap-2">
+                            <h4 className={`text-sm font-bold mb-0.5 ${n.unread ? 'text-foreground' : 'text-muted-foreground'}`}>{n.title}</h4>
+                            {n.unread && <span className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-1"></span>}
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed">{n.message}</p>
+                          <span className="text-[10px] font-medium text-muted-foreground mt-2 block">{n.time}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="p-2 bg-secondary/30 border-t border-border/50 text-center">
+                <button className="text-xs font-bold text-muted-foreground hover:text-foreground p-2 w-full rounded-xl transition-colors">
+                  View full history
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
