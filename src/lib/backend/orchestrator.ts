@@ -87,7 +87,13 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     await Promise.all(mitigationPromises);
 
     onProgress(6);
-    const complianceGaps = await agentCompliance(allThreats);
+    
+    // Look for the specific MMapp controls CSV file in the organizational knowledge base
+    const mmappDoc = globalDocs.find(d => d.name.toLowerCase().includes('mmapp controls.csv'));
+    const customControlsContext = mmappDoc?.content || '';
+    
+    // Evaluate against the specifically mapped controls if found, or standard NIST if not
+    const complianceGaps = await agentCompliance(allThreats, customControlsContext);
 
     onProgress(7);
     

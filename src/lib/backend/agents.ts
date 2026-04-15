@@ -190,22 +190,28 @@ ${searchContext}
 };
 
 /**
- * Compliance Agent: Maps identified threats to compliance gaps (NIST SP 800-53).
+ * Compliance Agent: Maps identified threats to compliance gaps based on provided controls.
  */
-export const agentCompliance = async (threats: Threat[]): Promise<ComplianceGap[]> => {
-  const systemPrompt = `You are a compliance expert. Given these identified threats, map them to missing NIST SP 800-53 controls. 
+export const agentCompliance = async (threats: Threat[], customControlsContext?: string): Promise<ComplianceGap[]> => {
+  const systemPrompt = `You are a compliance expert. Given these identified threats, map them to missing or partially met security controls.
+${customControlsContext 
+  ? `CRITICAL INSTRUCTION: You MUST ONLY evaluate compliance against the following specific mandatory controls provided in the organizational context:\n\n${customControlsContext}\n\nDo NOT use any other controls outside of this list.` 
+  : `Map them to missing NIST SP 800-53 controls.`}
+
 Return ONLY a valid JSON array of objects with this EXACT structure:
 [
   { 
-    "controlId": "AC-2", 
-    "title": "Account Management", 
+    "controlId": "string (e.g., AC-2)", 
+    "title": "string", 
     "status": "Gap Identified" | "Partially Met", 
-    "description": "Explain how the threat causes this control gap." 
+    "description": "Explain how the specific threat causes this control gap." 
   }
 ]`;
 
-  const gapsData = await callLLM(systemPrompt, `Identified Threats:\n${JSON.stringify(threats.map(t => ({ id: t.id, title: t.title, component: t.componentId })), null, 2)}`);
+  // Provide the LLM with the threat details to find the gaps
+  const promptData = `Identified Threats:\n${JSON.stringify(threats.map(t => ({ id: t.id, title: t.title, component: t.componentId, description: t.description })), null, 2)}`;
   
+  const gapsData = await callLLM(systemPrompt, promptData);
   return gapsData as ComplianceGap[];
 };
 
