@@ -19,7 +19,7 @@ Given the comprehensive system context, extract MAXIMUM details to build Level 1
 
 CRITICAL INSTRUCTION FOR DESCRIPTIONS:
 The "description" field for EVERY component MUST contain actual, real data from the input. DO NOT use generic phrases like "A database" or "A frontend". 
-Instead, specify exactly what it does, the precise technologies used (e.g., AWS, PostgreSQL, React, Auth0), and the specific data it processes based on the provided context. If a technology is not specified, infer its purpose precisely from the context and mark it as "Infered".
+Instead, specify exactly what it does, the precise technologies used (e.g., AWS, PostgreSQL, React, Auth0), and the specific data it processes based on the provided context. If a technology is not specified, infer its purpose precisely from the context.
 
 Rules for 'c4Level': 
 - Use 'Global' for Persons/External Systems that appear across all levels.
@@ -86,21 +86,24 @@ Return ONLY a valid JSON object with this EXACT structure:
 };
 
 /**
- * Threat Modeling Agent: Analyzes the SRG to identify threats based on the selected framework.
+ * Threat Modeling Agent: Analyzes the SRG alongside the full system context to identify threats.
  */
-export const agentThreatModeling = async (srg: SystemRepresentationGraph, framework: string): Promise<Threat[]> => {
-  const hash = await hashInput(`${framework}_${JSON.stringify(srg)}`);
+export const agentThreatModeling = async (srg: SystemRepresentationGraph, framework: string, systemContext: string): Promise<Threat[]> => {
+  const hash = await hashInput(`${framework}_${JSON.stringify(srg)}_${systemContext}`);
   const cached = await getCachedResult<Threat[]>('threatModeling', hash);
   if (cached) return cached;
 
-  const systemPrompt = `You are an expert threat modeler using the ${framework} framework. Analyze this System Representation Graph (SRG) JSON and identify potential threats in deep detail. 
+  const systemPrompt = `You are an expert threat modeler using the ${framework} framework. 
+Analyze the provided System Representation Graph (SRG) ALONG WITH the broader System Context (which includes textual descriptions, documents, diagrams, and repository analysis). 
+Identify potential threats in deep detail by correlating the architecture with the provided context.
+
 Return ONLY a valid JSON array of objects with this EXACT structure:
 [
   { 
     "id": "T-001", 
     "title": "string", 
     "description": "string (a comprehensive summary of the threat)", 
-    "evidence": "string (point out the exact components, missing boundaries, or data flows in the SRG that prove this threat exists)",
+    "evidence": "string (point out the exact components, missing boundaries in the SRG, OR specific clues from the System Context that prove this threat exists)",
     "reasoning": "string (explain step-by-step how an attacker would exploit this vulnerability)",
     "category": "string (the threat category according to the ${framework} framework)", 
     "componentId": "string (name of the vulnerable component)", 
@@ -109,7 +112,8 @@ Return ONLY a valid JSON array of objects with this EXACT structure:
   }
 ]`;
 
-  const threatsData = await callLLM(systemPrompt, `SRG Data:\n${JSON.stringify(srg, null, 2)}`);
+  const promptInput = `System Context:\n${systemContext}\n\nSRG Data:\n${JSON.stringify(srg, null, 2)}`;
+  const threatsData = await callLLM(systemPrompt, promptInput);
   
   const threats = (threatsData as Threat[]).sort((a, b) => b.cvssScore - a.cvssScore);
   

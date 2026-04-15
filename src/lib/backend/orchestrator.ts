@@ -70,7 +70,9 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
 
     onProgress(4);
     const framework = payload.frameworks[0] || 'STRIDE';
-    const archThreats = await agentThreatModeling(srg, framework);
+    
+    // Pass the SRG, framework, AND the finalInput (which contains text, documents, and repo analysis)
+    const archThreats = await agentThreatModeling(srg, framework, finalInput);
     
     // Combine architecture threats and SAST repo threats
     let allThreats = [...archThreats, ...repoThreats].sort((a, b) => b.cvssScore - a.cvssScore);
