@@ -21,6 +21,14 @@ export interface AnalysisPayload {
 
 export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress: (step: number) => void) => {
   try {
+    // Fetch global system context documents
+    const globalDocs = await db.documents.toArray();
+    let globalContextStr = "";
+    if (globalDocs.length > 0) {
+      globalContextStr = "\n\n--- GLOBAL SYSTEM CONTEXT (ORGANIZATIONAL KNOWLEDGE) ---\n" + 
+        globalDocs.map(d => `Document: ${d.name}\n${d.content}`).join('\n\n');
+    }
+
     const fullContext = `
       System Description: ${payload.description || 'Not provided'}
       Deployment Model: ${payload.questionnaire?.deployment.join(', ') || 'Unknown'}
@@ -28,6 +36,7 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
       Data Classification: ${payload.questionnaire?.dataClassification || 'Unknown'}
       Repository: ${payload.repositoryUrl || 'None'}
       Additional Docs [${payload.documentation?.title || 'Untitled'}]: ${payload.documentation?.content || 'None'}
+      ${globalContextStr}
     `.trim();
 
     onProgress(0);

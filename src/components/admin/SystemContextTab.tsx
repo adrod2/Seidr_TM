@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Loader2, UploadCloud, Settings2, FileText, Trash2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -6,21 +6,48 @@ import { db } from '@/lib/db';
 
 export const SystemContextTab = () => {
   const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const documents = useLiveQuery(() => db.documents.toArray());
 
-  const handleFileUpload = () => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
     setIsUploading(true);
-    toast.info('Analyzing document and generating embeddings...');
+    toast.info(`Analyzing ${files.length} document(s) and extracting text...`);
     
-    setTimeout(async () => {
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        
+        // Extract raw text. (For advanced PDF/DOCX we extract printable ascii strings as a fallback)
+        const text = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (event) => resolve(event.target?.result as string);
+          reader.onerror = reject;
+          reader.readAsText(file);
+        });
+
+        let cleanText = text;
+        if (file.name.endsWith('.pdf') || file.name.endsWith('.docx')) {
+           cleanText = text.replace(/[^\x20-\x7E\n\r\t]/g, '');
+        }
+
+        await db.documents.add({ 
+          id: Date.now() + i, 
+          name: file.name, 
+          chunks: Math.max(1, Math.ceil(cleanText.length / 500)),
+          content: cleanText.substring(0, 50000) // Cap at 50k chars to prevent LLM context bloat
+        });
+      }
+      toast.success('Document(s) successfully indexed into the database!');
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to read documents.');
+    } finally {
       setIsUploading(false);
-      await db.documents.add({ 
-        id: Date.now(), 
-        name: `Architecture_Guidelines_v${Math.floor(Math.random() * 10)}.pdf`, 
-        chunks: Math.floor(Math.random() * 200) + 50 
-      });
-      toast.success('Document successfully indexed into vector database!');
-    }, 2500);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const removeDocument = async (id: number) => {
@@ -39,8 +66,16 @@ export const SystemContextTab = () => {
         </p>
         
         <div className="flex gap-4 mb-6">
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileUpload} 
+            className="hidden" 
+            multiple 
+            accept=".pdf,.docx,.txt,.md,.csv" 
+          />
           <button 
-            onClick={handleFileUpload}
+            onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
             className="flex-1 border-2 border-dashed border-primary/50 rounded-2xl p-6 flex flex-col items-center justify-center hover:bg-primary/5 transition-colors cursor-pointer text-center disabled:opacity-70 disabled:cursor-not-allowed group"
           >
@@ -50,7 +85,7 @@ export const SystemContextTab = () => {
               <UploadCloud className="h-8 w-8 text-primary mb-2 group-hover:scale-110 transition-transform" />
             )}
             <span className="text-sm font-medium text-foreground">{isUploading ? 'Processing File...' : 'Upload Document'}</span>
-            <span className="text-xs text-muted-foreground mt-1">PDF, DOCX, TXT, MD</span>
+            <span className="text-xs text-muted-foreground mt-1">PDF, DOCX, TXT, MD, CSV</span>
           </button>
           <div 
             onClick={() => toast.info('Opening URL input dialog')}

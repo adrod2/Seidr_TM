@@ -33,6 +33,7 @@ export interface Document {
   id: number;
   name: string;
   chunks: number;
+  content?: string;
 }
 
 export interface User {

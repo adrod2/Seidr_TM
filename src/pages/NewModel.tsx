@@ -89,9 +89,31 @@ export const NewModel = () => {
       payloadDesc = "Standard web application running on AWS with React frontend and Node backend using a PostgreSQL database.";
     }
     
-    // Append attached docs metadata to payload description for context
+    // Extract actual text content from locally attached context documents
     if (uploadedDocs.length > 0) {
-      payloadDesc += `\n\nAttached Context Documents: ${uploadedDocs.map(d => d.name).join(', ')}`;
+      let localDocsText = "";
+      for (const file of uploadedDocs) {
+        try {
+          const text = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve((e.target?.result as string) || '');
+            reader.onerror = reject;
+            reader.readAsText(file);
+          });
+          
+          let cleanText = text;
+          // Clean up binary garbage for unsupported formats
+          if (file.name.endsWith('.pdf') || file.name.endsWith('.docx')) {
+             cleanText = text.replace(/[^\x20-\x7E\n\r\t]/g, '');
+          }
+          localDocsText += `\n\n--- Document: ${file.name} ---\n${cleanText.substring(0, 15000)}`;
+        } catch (e) {
+          console.warn(`Failed to read file ${file.name}`);
+        }
+      }
+      if (localDocsText) {
+        payloadDesc += `\n\nAttached Context Documents Content:${localDocsText}`;
+      }
     }
 
     const result = await startAnalysisPipeline(
@@ -258,7 +280,7 @@ export const NewModel = () => {
                    ref={docInputRef} 
                    onChange={handleDocUpload} 
                    multiple 
-                   accept=".doc,.docx,.pdf,.xls,.xlsx,.csv,.txt"
+                   accept=".doc,.docx,.pdf,.xls,.xlsx,.csv,.txt,.md"
                    className="hidden" 
                  />
               </div>
@@ -278,7 +300,7 @@ export const NewModel = () => {
                 </div>
               ) : (
                 <div className="text-center p-6 border border-dashed border-border/50 rounded-2xl bg-secondary/10">
-                  <p className="text-sm text-muted-foreground">No documents attached. Supported formats: .doc, .pdf, .xls, .csv, .txt</p>
+                  <p className="text-sm text-muted-foreground">No documents attached. Supported formats: .pdf, .docx, .txt, .csv, .md</p>
                 </div>
               )}
             </div>
