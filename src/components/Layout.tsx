@@ -11,13 +11,14 @@ import {
   Menu,
   Bell,
   Search,
-  User
+  BookOpen
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
 const Sidebar = () => {
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+    { icon: BookOpen, label: 'Instructions', path: '/instructions' },
     { icon: PlusCircle, label: 'New Model', path: '/models/new' },
     { icon: List, label: 'Threat Models', path: '/models' },
     { icon: Settings, label: 'Administration', path: '/admin' },
@@ -70,6 +71,7 @@ const Header = () => {
   const getTitle = () => {
     const path = location.pathname;
     if (path === '/') return 'Executive Dashboard';
+    if (path === '/instructions') return 'Instructions & Guide';
     if (path.startsWith('/models/new')) return 'New Threat Model';
     if (path.startsWith('/models/') && path !== '/models') return 'Threat Report';
     if (path === '/models') return 'Threat Models';

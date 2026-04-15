@@ -5,6 +5,7 @@ import { NewModel } from './pages/NewModel';
 import { ModelsList } from './pages/ModelsList';
 import { Report } from './pages/Report';
 import { Admin } from './pages/Admin';
+import { Instructions } from './pages/Instructions';
 import { ThemeProvider } from './components/theme-provider';
 import { Toaster } from 'sonner';
 
@@ -15,6 +16,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Dashboard />} />
+            <Route path="instructions" element={<Instructions />} />
             <Route path="models" element={<ModelsList />} />
             <Route path="models/new" element={<NewModel />} />
             <Route path="models/:id" element={<Report />} />
