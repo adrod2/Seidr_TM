@@ -9,11 +9,17 @@ const defaultGaps = [
 
 export const ComplianceTab = ({ gaps }: { gaps?: any[] }) => {
   const displayGaps = gaps && gaps.length > 0 ? gaps : defaultGaps;
-  // Consider both Gap Identified and Partially Met as missing the mark for a full pass
-  const gapsCount = displayGaps.filter(g => g.status === 'Gap Identified' || g.status === 'Partially Met').length;
-
+  
   const businessRisks = useLiveQuery(() => db.businessRisks.toArray());
   const documents = useLiveQuery(() => db.documents.toArray());
+
+  // Calculate unique failing controls
+  const uniqueFailingControlsCount = useMemo(() => {
+    const failingGaps = displayGaps.filter(g => g.status === 'Gap Identified' || g.status === 'Partially Met');
+    // Use a Set to ensure if the LLM returned multiple gaps for the same control, it only counts as 1 missed control
+    const uniqueControlIds = new Set(failingGaps.map(g => g.controlId));
+    return uniqueControlIds.size;
+  }, [displayGaps]);
 
   // Dynamically calculate score based on the MMapp controls.csv file from the knowledge base
   const { totalMandatory, metControls, complianceScore } = useMemo(() => {
@@ -22,8 +28,8 @@ export const ComplianceTab = ({ gaps }: { gaps?: any[] }) => {
     if (documents) {
       const mmappDoc = documents.find(d => d.name.toLowerCase().includes('mmapp controls.csv'));
       if (mmappDoc && mmappDoc.content) {
-        // Split by lines and remove empty ones
-        const rows = mmappDoc.content.split('\n').filter(line => line.trim().length > 0);
+        // Split by lines (handling both \n and \r\n), remove empty ones
+        const rows = mmappDoc.content.split(/\r?\n/).filter(line => line.trim().length > 0);
         if (rows.length > 1) {
           total = rows.length - 1; // Exclude the header row
         } else if (rows.length === 1) {
@@ -32,11 +38,12 @@ export const ComplianceTab = ({ gaps }: { gaps?: any[] }) => {
       }
     }
     
-    const met = Math.max(0, total - gapsCount);
+    // Met controls = total minus the unique controls that have gaps
+    const met = Math.max(0, total - uniqueFailingControlsCount);
     const score = total > 0 ? Math.round((met / total) * 100) : 0;
     
     return { totalMandatory: total, metControls: met, complianceScore: score };
-  }, [documents, gapsCount]);
+  }, [documents, uniqueFailingControlsCount]);
 
   return (
     <div className="flex-1 overflow-y-auto p-6 h-full bg-secondary/10">
@@ -49,16 +56,16 @@ export const ComplianceTab = ({ gaps }: { gaps?: any[] }) => {
           <div className="text-5xl font-bold text-emerald-500 mb-2">{metControls}/{totalMandatory}</div>
           <div className="text-sm font-medium text-muted-foreground">Mandatory Controls Met</div>
         </div>
-        <div className={`p-6 rounded-3xl border text-center shadow-sm ${gapsCount > 0 ? 'bg-destructive/5 border-destructive/20' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
-          <div className={`text-5xl font-bold mb-2 ${gapsCount > 0 ? 'text-destructive' : 'text-emerald-500'}`}>{gapsCount}</div>
-          <div className={`text-sm font-medium ${gapsCount > 0 ? 'text-destructive/80' : 'text-emerald-500/80'}`}>Critical Gaps Remaining</div>
+        <div className={`p-6 rounded-3xl border text-center shadow-sm ${uniqueFailingControlsCount > 0 ? 'bg-destructive/5 border-destructive/20' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
+          <div className={`text-5xl font-bold mb-2 ${uniqueFailingControlsCount > 0 ? 'text-destructive' : 'text-emerald-500'}`}>{uniqueFailingControlsCount}</div>
+          <div className={`text-sm font-medium ${uniqueFailingControlsCount > 0 ? 'text-destructive/80' : 'text-emerald-500/80'}`}>Controls with Critical Gaps</div>
         </div>
       </div>
 
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-bold flex items-center gap-2">
           <FileCheck className="h-5 w-5 text-primary" />
-          Control Status (NIST SP 800-53)
+          Control Status (Mapped against Organizational Policies)
         </h3>
       </div>
       <div className="border border-border/50 rounded-2xl overflow-hidden shadow-sm bg-card mb-8">
@@ -88,6 +95,13 @@ export const ComplianceTab = ({ gaps }: { gaps?: any[] }) => {
                   <td className="px-6 py-4 text-muted-foreground">{gap.description}</td>
                 </tr>
               ))}
+              {displayGaps.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-6 py-8 text-center text-muted-foreground">
+                    No compliance gaps detected against the evaluated controls.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
       </div>
@@ -119,7 +133,7 @@ export const ComplianceTab = ({ gaps }: { gaps?: any[] }) => {
             <tbody className="divide-y divide-border/50">
               {businessRisks.map((risk) => {
                 // Mock alignment status based on if gaps exist
-                const isExposed = gapsCount > 0 && Math.random() > 0.5; // randomize exposure slightly for demo if there are gaps
+                const isExposed = uniqueFailingControlsCount > 0 && Math.random() > 0.5; // randomize exposure slightly for demo if there are gaps
                 
                 return (
                   <tr key={risk.id} className="hover:bg-secondary/20 transition-colors">
