@@ -1,7 +1,7 @@
 "use client";
 
-import React from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
   ShieldAlert, 
   PlusCircle, 
@@ -13,6 +13,8 @@ import {
   BookOpen
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/lib/db';
 
 const Sidebar = () => {
   const navItems = [
@@ -66,6 +68,36 @@ const Sidebar = () => {
 
 const Header = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  // Close search dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setIsSearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Query database dynamically based on search input
+  const searchResults = useLiveQuery(
+    () => {
+      if (!searchQuery.trim()) return [];
+      const query = searchQuery.toLowerCase();
+      return db.threatModels
+        .filter(m => m.name.toLowerCase().includes(query) || m.id.toLowerCase().includes(query))
+        .limit(5)
+        .toArray();
+    },
+    [searchQuery]
+  );
   
   const getTitle = () => {
     const path = location.pathname;
@@ -75,6 +107,12 @@ const Header = () => {
     if (path === '/models') return 'Threat Models';
     if (path === '/admin') return 'Administration';
     return 'Seidr';
+  };
+
+  const handleSelectResult = (id: string) => {
+    setIsSearchOpen(false);
+    setSearchQuery('');
+    navigate(`/models/${id}`);
   };
 
   return (
@@ -87,14 +125,58 @@ const Header = () => {
       </div>
       
       <div className="flex items-center gap-4">
-        <div className="relative hidden md:block">
+        <div className="relative hidden md:block" ref={searchRef}>
           <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setIsSearchOpen(true);
+            }}
+            onFocus={() => setIsSearchOpen(true)}
             placeholder="Search models..."
-            className="h-9 pl-9 pr-4 rounded-full bg-secondary/50 border-none text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all w-64"
+            className="h-9 pl-9 pr-4 rounded-full bg-secondary/50 border border-border/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all w-64 shadow-inner"
           />
+          
+          {/* Search Results Dropdown */}
+          {isSearchOpen && searchQuery.trim() && (
+            <div className="absolute top-full mt-2 w-full bg-card border border-border/50 rounded-2xl shadow-xl overflow-hidden z-50">
+              {searchResults === undefined ? (
+                <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
+              ) : searchResults.length === 0 ? (
+                <div className="p-4 text-center text-sm text-muted-foreground">No models found.</div>
+              ) : (
+                <div className="flex flex-col max-h-72 overflow-y-auto">
+                  {searchResults.map(model => (
+                    <button
+                      key={model.id}
+                      onClick={() => handleSelectResult(model.id)}
+                      className="text-left px-4 py-3 hover:bg-secondary/50 transition-colors border-b border-border/50 last:border-0 flex flex-col group"
+                    >
+                      <span className="font-bold text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                        {model.name}
+                      </span>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="text-[10px] font-mono text-muted-foreground bg-secondary px-1.5 py-0.5 rounded border border-border/50">
+                          {model.id}
+                        </span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                          model.riskScore >= 80 ? 'text-destructive bg-destructive/10' :
+                          model.riskScore >= 50 ? 'text-amber-500 bg-amber-500/10' :
+                          'text-emerald-500 bg-emerald-500/10'
+                        }`}>
+                          Risk: {model.riskScore}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
+        
         <ThemeToggle />
         <button className="p-2 text-muted-foreground hover:bg-secondary/50 rounded-full transition-colors relative">
           <Bell className="h-5 w-5" />
