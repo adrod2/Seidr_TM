@@ -1,3 +1,5 @@
+"use client";
+
 import React from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { 
@@ -105,12 +107,16 @@ const Header = () => {
 
 export const Layout = () => {
   return (
-    <div className="flex h-screen bg-background text-foreground overflow-hidden">
-      <Sidebar />
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-8">
-          <div className="max-w-7xl mx-auto h-full">
+    <div className="flex h-screen bg-background text-foreground overflow-hidden print:h-auto print:overflow-visible print:bg-white">
+      <div className="print:hidden flex-shrink-0">
+        <Sidebar />
+      </div>
+      <div className="flex-1 flex flex-col h-full overflow-hidden print:overflow-visible">
+        <div className="print:hidden">
+          <Header />
+        </div>
+        <main className="flex-1 overflow-y-auto p-8 print:p-0 print:overflow-visible print:bg-white">
+          <div className="max-w-7xl mx-auto h-full print:h-auto print:max-w-none print:w-full">
             <Outlet />
           </div>
         </main>

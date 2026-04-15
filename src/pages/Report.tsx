@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { ShieldAlert, GitMerge, CheckSquare, FileCheck, Download, Share2, Sparkles, Loader2, X } from 'lucide-react';
@@ -10,6 +12,7 @@ import { C4ArchitectureTab } from '@/components/report/C4ArchitectureTab';
 import { MitigationsTab } from '@/components/report/MitigationsTab';
 import { ComplianceTab } from '@/components/report/ComplianceTab';
 import { CopilotSidebar } from '@/components/report/CopilotSidebar';
+import { PrintReport } from '@/components/report/PrintReport';
 import { TabButton } from '@/components/TabButton';
 
 export const Report = () => {
@@ -56,7 +59,7 @@ export const Report = () => {
   const formattedDate = new Date(modelData.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
   const exportFormats = [
-    { id: 'pdf', label: 'PDF (Includes Diagram)' },
+    { id: 'pdf', label: 'PDF Report (Threats & Mitigations)' },
     { id: 'csv', label: 'CSV (Threats Table)' },
     { id: 'json', label: 'JSON (Raw Data)' }
   ];
@@ -118,7 +121,6 @@ export const Report = () => {
           toast.success(`CSV exported successfully in ${langLabel}!`);
 
         } else if (exportFormat === 'pdf') {
-          setActiveTab('c4'); 
           toast.info(`Preparing PDF in ${langLabel}... Please select "Save as PDF" as the destination.`, { duration: 5000 });
           setTimeout(() => {
             window.print();
@@ -144,143 +146,146 @@ export const Report = () => {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] relative">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <h2 className="text-2xl font-bold">{modelData.name}</h2>
-            <span className={`${riskBadge.color} text-xs font-bold px-2.5 py-1 rounded-full border`}>
-              Risk: {riskBadge.label} ({modelData.riskScore})
-            </span>
-          </div>
-          <p className="text-muted-foreground text-sm flex items-center gap-2">
-            Model ID: <span className="font-mono text-xs bg-secondary/50 px-1.5 py-0.5 rounded border border-border/50">{modelData.id}</span>
-            <span className="px-1">•</span> Generated: {formattedDate}
-          </p>
-        </div>
-        <div className="flex gap-3 relative">
-          <button 
-            onClick={() => setIsCopilotOpen(true)}
-            className="bg-accent/10 text-accent px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-accent/20 transition-all border border-accent/20 shadow-sm"
-          >
-            <Sparkles className="h-4 w-4" />
-            AI Copilot
-          </button>
-          <button 
-            onClick={() => toast.success('Report link copied to clipboard')}
-            className="bg-secondary/50 text-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-secondary transition-all"
-          >
-            <Share2 className="h-4 w-4" />
-            Share
-          </button>
-          <button 
-            onClick={() => setIsExportModalOpen(true)}
-            className="bg-primary text-primary-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-primary/90 transition-all shadow-sm"
-          >
-            <Download className="h-4 w-4" />
-            Export Report
-          </button>
-        </div>
-      </div>
-
-      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none shrink-0">
-        <TabButton active={activeTab === 'threats'} onClick={() => setActiveTab('threats')} icon={ShieldAlert} label="Threat Catalog" />
-        <TabButton active={activeTab === 'c4'} onClick={() => setActiveTab('c4')} icon={GitMerge} label="C4 Architecture" />
-        <TabButton active={activeTab === 'mitigations'} onClick={() => setActiveTab('mitigations')} icon={CheckSquare} label="Mitigation Plan" />
-        <TabButton active={activeTab === 'compliance'} onClick={() => setActiveTab('compliance')} icon={FileCheck} label="Compliance" />
-      </div>
-
-      <div className="bg-card border border-border/50 rounded-3xl shadow-sm flex-1 mt-4 overflow-hidden flex">
-        <div className="flex-1 flex flex-col min-w-0">
-          {activeTab === 'threats' && <ThreatCatalogTab threats={modelData.threats} framework={modelData.framework} />}
-          {activeTab === 'c4' && <C4ArchitectureTab srg={modelData.srg} modelId={modelData.id} />}
-          {activeTab === 'mitigations' && <MitigationsTab threats={modelData.threats} />}
-          {activeTab === 'compliance' && <ComplianceTab gaps={modelData.complianceGaps} />}
-        </div>
-
-        <CopilotSidebar 
-          isOpen={isCopilotOpen} 
-          onClose={() => setIsCopilotOpen(false)} 
-          modelData={modelData} 
-        />
-      </div>
-
-      {/* Export Configuration Modal */}
-      {isExportModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
-          <div className="bg-card border border-border/50 rounded-3xl p-6 shadow-2xl w-full max-w-md animate-in fade-in zoom-in-95">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold flex items-center gap-2">
-                <Download className="h-5 w-5 text-primary" /> Export Options
-              </h3>
-              <button 
-                onClick={() => setIsExportModalOpen(false)}
-                className="text-muted-foreground hover:text-foreground bg-secondary/50 hover:bg-secondary p-1.5 rounded-full transition-colors"
-              >
-                <X className="h-4 w-4" />
-              </button>
+    <>
+      <div className="flex flex-col h-[calc(100vh-8rem)] relative print:hidden">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <h2 className="text-2xl font-bold">{modelData.name}</h2>
+              <span className={`${riskBadge.color} text-xs font-bold px-2.5 py-1 rounded-full border`}>
+                Risk: {riskBadge.label} ({modelData.riskScore})
+              </span>
             </div>
-            
-            <div className="space-y-5">
-              <div>
-                <label className="block text-sm font-bold mb-2 text-foreground">File Format</label>
-                <div className="grid grid-cols-1 gap-2">
-                  {exportFormats.map(fmt => (
-                    <label 
-                      key={fmt.id} 
-                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                        exportFormat === fmt.id 
-                          ? 'border-primary bg-primary/10' 
-                          : 'border-border/50 bg-secondary/30 hover:bg-secondary/50'
-                      }`}
-                    >
-                      <input 
-                        type="radio" 
-                        name="format" 
-                        value={fmt.id} 
-                        checked={exportFormat === fmt.id}
-                        onChange={(e) => setExportFormat(e.target.value)}
-                        className="text-primary focus:ring-primary h-4 w-4 accent-primary" 
-                      />
-                      <span className="text-sm font-medium">{fmt.label}</span>
-                    </label>
-                  ))}
+            <p className="text-muted-foreground text-sm flex items-center gap-2">
+              Model ID: <span className="font-mono text-xs bg-secondary/50 px-1.5 py-0.5 rounded border border-border/50">{modelData.id}</span>
+              <span className="px-1">•</span> Generated: {formattedDate}
+            </p>
+          </div>
+          <div className="flex gap-3 relative">
+            <button 
+              onClick={() => setIsCopilotOpen(true)}
+              className="bg-accent/10 text-accent px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-accent/20 transition-all border border-accent/20 shadow-sm"
+            >
+              <Sparkles className="h-4 w-4" />
+              AI Copilot
+            </button>
+            <button 
+              onClick={() => toast.success('Report link copied to clipboard')}
+              className="bg-secondary/50 text-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-secondary transition-all"
+            >
+              <Share2 className="h-4 w-4" />
+              Share
+            </button>
+            <button 
+              onClick={() => setIsExportModalOpen(true)}
+              className="bg-primary text-primary-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-primary/90 transition-all shadow-sm"
+            >
+              <Download className="h-4 w-4" />
+              Export Report
+            </button>
+          </div>
+        </div>
+
+        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none shrink-0">
+          <TabButton active={activeTab === 'threats'} onClick={() => setActiveTab('threats')} icon={ShieldAlert} label="Threat Catalog" />
+          <TabButton active={activeTab === 'c4'} onClick={() => setActiveTab('c4')} icon={GitMerge} label="C4 Architecture" />
+          <TabButton active={activeTab === 'mitigations'} onClick={() => setActiveTab('mitigations')} icon={CheckSquare} label="Mitigation Plan" />
+          <TabButton active={activeTab === 'compliance'} onClick={() => setActiveTab('compliance')} icon={FileCheck} label="Compliance" />
+        </div>
+
+        <div className="bg-card border border-border/50 rounded-3xl shadow-sm flex-1 mt-4 overflow-hidden flex">
+          <div className="flex-1 flex flex-col min-w-0">
+            {activeTab === 'threats' && <ThreatCatalogTab threats={modelData.threats} framework={modelData.framework} />}
+            {activeTab === 'c4' && <C4ArchitectureTab srg={modelData.srg} modelId={modelData.id} />}
+            {activeTab === 'mitigations' && <MitigationsTab threats={modelData.threats} />}
+            {activeTab === 'compliance' && <ComplianceTab gaps={modelData.complianceGaps} />}
+          </div>
+
+          <CopilotSidebar 
+            isOpen={isCopilotOpen} 
+            onClose={() => setIsCopilotOpen(false)} 
+            modelData={modelData} 
+          />
+        </div>
+
+        {/* Export Configuration Modal */}
+        {isExportModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+            <div className="bg-card border border-border/50 rounded-3xl p-6 shadow-2xl w-full max-w-md animate-in fade-in zoom-in-95">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <Download className="h-5 w-5 text-primary" /> Export Options
+                </h3>
+                <button 
+                  onClick={() => setIsExportModalOpen(false)}
+                  className="text-muted-foreground hover:text-foreground bg-secondary/50 hover:bg-secondary p-1.5 rounded-full transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-sm font-bold mb-2 text-foreground">File Format</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {exportFormats.map(fmt => (
+                      <label 
+                        key={fmt.id} 
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                          exportFormat === fmt.id 
+                            ? 'border-primary bg-primary/10' 
+                            : 'border-border/50 bg-secondary/30 hover:bg-secondary/50'
+                        }`}
+                      >
+                        <input 
+                          type="radio" 
+                          name="format" 
+                          value={fmt.id} 
+                          checked={exportFormat === fmt.id}
+                          onChange={(e) => setExportFormat(e.target.value)}
+                          className="text-primary focus:ring-primary h-4 w-4 accent-primary" 
+                        />
+                        <span className="text-sm font-medium">{fmt.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold mb-2 text-foreground">Report Language</label>
+                  <select 
+                    value={exportLanguage}
+                    onChange={(e) => setExportLanguage(e.target.value)}
+                    className="w-full bg-secondary/30 border border-border/50 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none cursor-pointer hover:border-primary/50 transition-colors"
+                  >
+                    {exportLanguages.map(lang => (
+                      <option key={lang.id} value={lang.id}>
+                        {lang.label} {lang.id === 'en' ? '(Default)' : ''}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
-
-              <div>
-                <label className="block text-sm font-bold mb-2 text-foreground">Report Language</label>
-                <select 
-                  value={exportLanguage}
-                  onChange={(e) => setExportLanguage(e.target.value)}
-                  className="w-full bg-secondary/30 border border-border/50 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none cursor-pointer hover:border-primary/50 transition-colors"
+              
+              <div className="flex justify-end gap-3 mt-8">
+                <button
+                  onClick={() => setIsExportModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-secondary transition-colors"
                 >
-                  {exportLanguages.map(lang => (
-                    <option key={lang.id} value={lang.id}>
-                      {lang.label} {lang.id === 'en' ? '(Default)' : ''}
-                    </option>
-                  ))}
-                </select>
+                  Cancel
+                </button>
+                <button
+                  onClick={handleExport}
+                  className="px-6 py-2.5 rounded-xl text-sm font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" /> Download
+                </button>
               </div>
             </div>
-            
-            <div className="flex justify-end gap-3 mt-8">
-              <button
-                onClick={() => setIsExportModalOpen(false)}
-                className="px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-secondary transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleExport}
-                className="px-6 py-2.5 rounded-xl text-sm font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm flex items-center gap-2"
-              >
-                <Download className="h-4 w-4" /> Download
-              </button>
-            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+      <PrintReport modelData={modelData} />
+    </>
   );
 };
