@@ -11,12 +11,14 @@ import {
   X,
   FileImage,
   Paperclip,
-  Shield
+  Shield,
+  AlertTriangle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { startAnalysisPipeline } from '@/lib/backend/orchestrator';
+import { agentAnalyzeDiagram } from '@/lib/backend/agents';
 import { TabButton } from '@/components/TabButton';
 
 const analysisSteps = [
@@ -29,6 +31,13 @@ const analysisSteps = [
   "Evaluating compliance against NIST SP 800-53...",
   "Generating final threat model report..."
 ];
+
+interface UploadedDiagram {
+  file: File;
+  description?: string;
+  isAnalyzing: boolean;
+  error?: string;
+}
 
 export const NewModel = () => {
   const [activeTab, setActiveTab] = useState('text');
@@ -44,14 +53,38 @@ export const NewModel = () => {
   const [showNameError, setShowNameError] = useState(false);
   const [description, setDescription] = useState('');
   const [repoUrl, setRepoUrl] = useState('');
-  const [uploadedDiagrams, setUploadedDiagrams] = useState<File[]>([]);
+  const [uploadedDiagrams, setUploadedDiagrams] = useState<UploadedDiagram[]>([]);
   const [uploadedDocs, setUploadedDocs] = useState<File[]>([]);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const newFiles = Array.from(e.target.files);
-      setUploadedDiagrams(prev => [...prev, ...newFiles]);
-      toast.success(`${newFiles.length} diagram(s) added to context.`);
+      
+      const newDiagrams: UploadedDiagram[] = newFiles.map(f => ({ file: f, isAnalyzing: true }));
+      setUploadedDiagrams(prev => [...prev, ...newDiagrams]);
+      
+      for (const newDiag of newDiagrams) {
+        try {
+          const base64DataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (event) => resolve(event.target?.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(newDiag.file);
+          });
+          
+          const desc = await agentAnalyzeDiagram(base64DataUrl);
+          
+          setUploadedDiagrams(prev => prev.map(d => 
+            d.file === newDiag.file ? { ...d, description: desc, isAnalyzing: false } : d
+          ));
+          toast.success(`Vision Analysis complete for ${newDiag.file.name}`);
+        } catch (error: any) {
+          setUploadedDiagrams(prev => prev.map(d => 
+            d.file === newDiag.file ? { ...d, isAnalyzing: false, error: error.message } : d
+          ));
+          toast.error(`Failed to analyze ${newDiag.file.name}`);
+        }
+      }
     }
   };
 
@@ -79,11 +112,16 @@ export const NewModel = () => {
       return;
     }
     
+    // Check if diagrams are still processing
+    if (uploadedDiagrams.some(d => d.isAnalyzing)) {
+      toast.error('Please wait for diagram analysis to finish before starting the pipeline.');
+      return;
+    }
+
     setShowNameError(false);
     setIsAnalyzing(true);
     setCurrentStep(0);
 
-    // Provide default context if user provided strictly nothing
     let payloadDesc = description;
     if (!description && uploadedDiagrams.length === 0 && !repoUrl && uploadedDocs.length === 0) {
       payloadDesc = "Standard web application running on AWS with React frontend and Node backend using a PostgreSQL database.";
@@ -102,7 +140,6 @@ export const NewModel = () => {
           });
           
           let cleanText = text;
-          // Clean up binary garbage for unsupported formats
           if (file.name.endsWith('.pdf') || file.name.endsWith('.docx')) {
              cleanText = text.replace(/[^\x20-\x7E\n\r\t]/g, '');
           }
@@ -113,6 +150,18 @@ export const NewModel = () => {
       }
       if (localDocsText) {
         payloadDesc += `\n\nAttached Context Documents Content:${localDocsText}`;
+      }
+    }
+
+    // Inject AI diagram descriptions into the context
+    if (uploadedDiagrams.length > 0) {
+      const diagramContext = uploadedDiagrams
+        .filter(d => d.description)
+        .map(d => `--- Diagram: ${d.file.name} ---\n${d.description}`)
+        .join('\n\n');
+        
+      if (diagramContext) {
+        payloadDesc += `\n\nArchitecture Diagram Analyses:\n${diagramContext}`;
       }
     }
 
@@ -320,13 +369,13 @@ export const NewModel = () => {
                   ref={fileInputRef} 
                   onChange={handleFileUpload} 
                   multiple 
-                  accept="image/png, image/jpeg, application/pdf, .vsdx, .xml"
+                  accept="image/png, image/jpeg, image/webp"
                   className="hidden" 
                 />
                 <Upload className="h-12 w-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-1">Upload Diagrams</h3>
                 <p className="text-sm text-muted-foreground mb-4 text-center">Drag and drop architecture diagrams, or click to browse</p>
-                <p className="text-xs text-muted-foreground text-center">Supported: PNG, JPG, SVG, PDF, Visio (.vsdx), draw.io XML</p>
+                <p className="text-xs text-muted-foreground text-center">Supported: PNG, JPG, WEBP</p>
               </div>
 
               <div className="bg-secondary/10 border border-border/50 rounded-3xl p-6 overflow-y-auto">
@@ -337,13 +386,21 @@ export const NewModel = () => {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {uploadedDiagrams.map((file, idx) => (
+                    {uploadedDiagrams.map((diag, idx) => (
                       <div key={idx} className="flex items-center justify-between p-3 bg-card border border-border/50 rounded-xl">
                         <div className="flex items-center gap-3 truncate">
-                          <FileImage className="h-5 w-5 text-primary flex-shrink-0" />
+                          {diag.isAnalyzing ? (
+                            <Loader2 className="h-5 w-5 text-primary flex-shrink-0 animate-spin" />
+                          ) : diag.error ? (
+                            <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0" />
+                          ) : (
+                            <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+                          )}
                           <div className="truncate">
-                            <p className="text-sm font-medium truncate">{file.name}</p>
-                            <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                            <p className="text-sm font-medium truncate">{diag.file.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {diag.isAnalyzing ? 'Extracting architecture details via Vision...' : diag.error ? 'Analysis failed' : 'Architecture extracted successfully'}
+                            </p>
                           </div>
                         </div>
                         <button 

@@ -1,6 +1,25 @@
 import { hashInput, getCachedResult, setCachedResult } from './agentCache';
 import { SystemRepresentationGraph, Threat, ComplianceGap } from './types';
-import { callLLM } from './llmClient';
+import { callLLM, callVisionLLM } from './llmClient';
+
+/**
+ * Diagram Analysis Agent: Uses Vision LLMs to extract dense textual architecture details from an image.
+ */
+export const agentAnalyzeDiagram = async (base64DataUrl: string): Promise<string> => {
+  // Hash the first 500 characters of the base64 string to keep it performant
+  const hash = await hashInput(base64DataUrl.substring(0, 500)); 
+  const cached = await getCachedResult<string>('diagramAnalysis', hash);
+  if (cached) return cached;
+
+  const systemPrompt = `You are an expert cloud architect and security engineer. Analyze the provided architecture diagram in extensive technical detail. Identify all components, data flows, trust boundaries, network zones, and technologies depicted. Focus strictly on facts visible in the diagram and infer their security implications based on standard architecture patterns.`;
+  
+  const userPrompt = "Describe this architecture diagram in extensive technical detail so it can be used for threat modeling. List components, data flows, and boundaries.";
+
+  const result = await callVisionLLM(systemPrompt, userPrompt, base64DataUrl);
+  
+  await setCachedResult('diagramAnalysis', hash, result);
+  return result;
+};
 
 /**
  * C4 Architecture Agent: Converts raw system descriptions into a highly structured C4 System Representation Graph (SRG).
@@ -168,7 +187,7 @@ Given a specific threat from a threat model and the broader system context, prov
 Context Rules:
 1. Ground your advice in the provided System Context (technologies, frameworks).
 2. Incorporate modern best practices, drawing from the provided Web Search Context if available.
-3. Be specific. Example: Do not say "implement secure logging". Instead say "Configure your Node.js backend to use Winston for structured JSON logging, sending logs to AWS CloudWatch via an IAM role with restricted put-only permissions."
+3. Be specific. Do not say "implement secure logging". Instead say "Configure your Node.js backend to use Winston for structured JSON logging, sending logs to AWS CloudWatch via an IAM role with restricted put-only permissions."
 
 Return ONLY a raw string (no markdown formatting, no JSON, just the text) containing the tailored mitigation plan. Keep it between 3 and 5 sentences.`;
 
