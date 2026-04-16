@@ -130,7 +130,7 @@ export const callVisionLLM = async (systemPrompt: string, userPrompt: string, ba
     if (config.provider === 'gemini') {
       const mimeType = base64DataUrl.split(':')[1].split(';')[0];
       const base64Data = base64DataUrl.split(',')[1];
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-preview:generateContent?key=${config.apiKey}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent?key=${config.apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
