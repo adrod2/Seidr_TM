@@ -23,21 +23,13 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 
-const historicalRiskData = [
-  { name: 'Jan', score: 85, target: 50 },
-  { name: 'Feb', score: 78, target: 50 },
-  { name: 'Mar', score: 72, target: 50 },
-  { name: 'Apr', score: 65, target: 50 },
-  { name: 'May', score: 58, target: 50 },
-];
-
 const StatCard = ({ title, value, change, icon: Icon, trendColor, subtext }: any) => (
   <div className="bg-card p-6 rounded-3xl border border-border/50 shadow-sm flex flex-col">
     <div className="flex justify-between items-start mb-4">
       <div className="p-3 bg-primary/10 text-primary rounded-2xl">
         <Icon className="h-6 w-6" />
       </div>
-      {change && (
+      {change && change !== '0 pts' && (
         <div className={`flex items-center gap-1 text-sm font-medium px-2 py-1 rounded-full ${
           trendColor === 'bad' ? 'text-destructive bg-destructive/10' : 'text-emerald-500 bg-emerald-500/10'
         }`}>
@@ -56,54 +48,142 @@ const StatCard = ({ title, value, change, icon: Icon, trendColor, subtext }: any
 
 export const Dashboard = () => {
   const models = useLiveQuery(() => db.threatModels.toArray());
+  const documents = useLiveQuery(() => db.documents.toArray());
   
-  // Consolidating rendering state into a single useMemo eliminates cascading updates and re-renders
   const stats = useMemo(() => {
-    if (!models) {
+    if (!models || models.length === 0) {
       return {
-        metrics: { avgScore: 0, modelCount: 0, change: '0 pts' },
-        chartData: historicalRiskData,
+        metrics: { avgScore: 0, modelCount: 0, change: '0 pts', complianceScore: 0, openActions: 0, coverage: 0, mitigatedTotal: 0 },
+        chartData: [
+          { name: 'Jan', score: 0, target: 50 },
+          { name: 'Feb', score: 0, target: 50 },
+          { name: 'Mar', score: 0, target: 50 },
+          { name: 'Apr', score: 0, target: 50 },
+          { name: 'May', score: 0, target: 50 },
+        ],
         frameworkData: [],
         totalThreats: 0
       };
     }
 
     let totalScore = 0;
-    let openThreats = 0;
-    const categoryCounts: Record<string, number> = {};
+    let totalThreats = 0;
+    let totalGaps = 0;
+    const categoryCounts: Record<string, { open: number, mitigated: number }> = {};
 
     models.forEach(m => {
       totalScore += m.riskScore;
+      
       m.threats?.forEach(t => {
-        openThreats++;
+        totalThreats++;
         const cat = t.category || 'Unknown';
-        categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+        if (!categoryCounts[cat]) categoryCounts[cat] = { open: 0, mitigated: 0 };
+        
+        // A threat is considered mitigated if it has a populated mitigation strategy
+        const hasMitigation = t.mitigation && t.mitigation.length > 5;
+        if (hasMitigation) {
+          categoryCounts[cat].mitigated++;
+        } else {
+          categoryCounts[cat].open++;
+        }
       });
+
+      // Calculate unique compliance gaps
+      const uniqueGaps = new Set((m.complianceGaps || [])
+        .filter((g: any) => g.status === 'Gap Identified' || g.status === 'Partially Met')
+        .map((g: any) => g.controlId));
+      
+      totalGaps += uniqueGaps.size;
     });
 
-    const avg = models.length > 0 ? Math.round(totalScore / models.length) : 0;
-    const metrics = {
-      avgScore: avg,
-      modelCount: models.length,
-      change: avg < 58 ? `-${58 - avg} pts` : `+${avg - 58} pts`
-    };
+    const avgScore = Math.round(totalScore / models.length);
 
-    const currentMonth = new Date().toLocaleString('default', { month: 'short' });
-    const chartData = [...historicalRiskData, { name: currentMonth, score: avg, target: 50 }];
+    // Calculate historical risk trend (last 6 months)
+    const now = new Date();
+    const last6Months = Array.from({length: 6}, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+      return { month: d.getMonth(), year: d.getFullYear(), name: d.toLocaleString('default', { month: 'short' }), score: 0, count: 0 };
+    });
 
-    const totalThreats = openThreats + 85; // 85 historically mitigated
+    models.forEach(m => {
+      const d = new Date(m.date);
+      const mMonth = d.getMonth();
+      const mYear = d.getFullYear();
+      const targetMonth = last6Months.find(lm => lm.month === mMonth && lm.year === mYear);
+      if (targetMonth) {
+        targetMonth.score += m.riskScore;
+        targetMonth.count += 1;
+      }
+    });
 
+    const chartData = last6Months.map(lm => ({
+      name: lm.name,
+      score: lm.count > 0 ? Math.round(lm.score / lm.count) : 0,
+      target: 50
+    }));
+
+    // Carry over values for empty months to make chart continuous
+    let lastKnownScore = chartData.find(c => c.score > 0)?.score || 0;
+    for (let i = 0; i < chartData.length; i++) {
+      if (chartData[i].score > 0) {
+        lastKnownScore = chartData[i].score;
+      } else if (lastKnownScore > 0) {
+        chartData[i].score = lastKnownScore;
+      }
+    }
+
+    const previousMonthScore = chartData[4].score || 0;
+    const currentMonthScore = chartData[5].score || avgScore;
+    const diff = currentMonthScore - previousMonthScore;
+    const change = diff === 0 ? '0 pts' : diff > 0 ? `+${diff} pts` : `${diff} pts`;
+
+    // Framework Data Formatting
     const frameworkData = Object.keys(categoryCounts)
       .map(category => ({
         name: category.length > 15 ? category.substring(0, 15) + '...' : category,
-        mitigated: Math.floor(Math.random() * 15) + 5,
-        open: categoryCounts[category]
+        mitigated: categoryCounts[category].mitigated,
+        open: categoryCounts[category].open
       }))
-      .sort((a, b) => b.open - a.open) // Sort by most open threats
-      .slice(0, 8); // Limit to top 8 categories so chart stays clean
-      
-    return { metrics, chartData, totalThreats, frameworkData };
-  }, [models]);
+      .sort((a, b) => (b.open + b.mitigated) - (a.open + a.mitigated))
+      .slice(0, 8); // Display top 8 categories
+
+    // Calculate Compliance Score
+    let totalMandatory = 50; 
+    if (documents) {
+      const mmappDoc = documents.find(d => d.name.toLowerCase().includes('mmapp controls.csv'));
+      if (mmappDoc && mmappDoc.content) {
+        const rows = mmappDoc.content.split(/\r?\n/).filter(line => line.trim().length > 0);
+        if (rows.length > 1) {
+          totalMandatory = rows.length - 1;
+        } else if (rows.length === 1) {
+          totalMandatory = 1;
+        }
+      }
+    }
+    
+    const avgGaps = models.length > 0 ? totalGaps / models.length : 0;
+    const metControls = Math.max(0, totalMandatory - avgGaps);
+    const complianceScore = totalMandatory > 0 ? Math.round((metControls / totalMandatory) * 100) : 0;
+
+    const mitigatedTotal = Object.values(categoryCounts).reduce((acc, c) => acc + c.mitigated, 0);
+    const coverage = totalThreats > 0 ? Math.round((mitigatedTotal / totalThreats) * 100) : 0;
+    const openActions = totalThreats - mitigatedTotal;
+
+    return { 
+      metrics: { 
+        avgScore, 
+        modelCount: models.length, 
+        change,
+        complianceScore,
+        openActions,
+        coverage,
+        mitigatedTotal
+      }, 
+      chartData, 
+      totalThreats, 
+      frameworkData 
+    };
+  }, [models, documents]);
 
   if (models === undefined) {
     return (
@@ -114,7 +194,7 @@ export const Dashboard = () => {
   }
 
   const { metrics, chartData, frameworkData, totalThreats } = stats;
-  const isRiskGood = metrics.avgScore < 50;
+  const isRiskGood = metrics.avgScore <= 50;
 
   return (
     <div className="space-y-8 pb-8">
@@ -129,25 +209,22 @@ export const Dashboard = () => {
         />
         <StatCard
           title="Mitigation Coverage"
-          value={totalThreats > 0 ? Math.round((85 / totalThreats) * 100) + "%" : "0%"}
-          change="+12%"
+          value={`${metrics.coverage}%`}
           trendColor="good"
           icon={ShieldCheck}
-          subtext={`85 / ${totalThreats} Total Threats`}
+          subtext={`${metrics.mitigatedTotal} / ${totalThreats} Total Threats`}
         />
         <StatCard
           title="Compliance Score"
-          value="92%"
-          change="+5%"
-          trendColor="good"
+          value={`${metrics.complianceScore}%`}
+          trendColor={metrics.complianceScore >= 80 ? 'good' : 'bad'}
           icon={CheckCircle}
-          subtext="Mandatory controls weighted 2x"
+          subtext="Mandatory controls met"
         />
         <StatCard
           title="Open Action Items"
-          value={Math.max(0, totalThreats - 85)}
-          change="-3"
-          trendColor="good"
+          value={metrics.openActions}
+          trendColor={metrics.openActions === 0 ? 'good' : 'bad'}
           icon={Clock}
           subtext="High Priority Tasks Pending"
         />
