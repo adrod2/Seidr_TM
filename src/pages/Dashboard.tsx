@@ -79,9 +79,9 @@ export const Dashboard = () => {
         const cat = t.category || 'Unknown';
         if (!categoryCounts[cat]) categoryCounts[cat] = { open: 0, mitigated: 0 };
         
-        // A threat is considered mitigated if it has a populated mitigation strategy
-        const hasMitigation = t.mitigation && t.mitigation.length > 5;
-        if (hasMitigation) {
+        // A threat is considered mitigated if its status is 'Done' or 'Exception'
+        const isMitigated = t.status === 'Done' || t.status === 'Exception';
+        if (isMitigated) {
           categoryCounts[cat].mitigated++;
         } else {
           categoryCounts[cat].open++;

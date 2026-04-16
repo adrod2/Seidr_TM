@@ -211,7 +211,7 @@ export const Report = () => {
           <div className="flex-1 flex flex-col min-w-0">
             {activeTab === 'threats' && <ThreatCatalogTab threats={modelData.threats} framework={modelData.framework} />}
             {activeTab === 'c4' && <C4ArchitectureTab srg={modelData.srg} modelId={modelData.id} />}
-            {activeTab === 'mitigations' && <MitigationsTab threats={modelData.threats} />}
+            {activeTab === 'mitigations' && <MitigationsTab threats={modelData.threats} modelId={modelData.id} />}
             {activeTab === 'compliance' && <ComplianceTab gaps={modelData.complianceGaps} />}
           </div>
 

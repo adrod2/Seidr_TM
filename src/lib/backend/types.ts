@@ -35,6 +35,8 @@ export interface Threat {
   mitigation?: string;
   evidence?: string;
   reasoning?: string;
+  status?: string;
+  justification?: string;
 }
 
 export interface ComplianceGap {

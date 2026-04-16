@@ -1,10 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { toast } from 'sonner';
 import { Search, X, SlidersHorizontal, KanbanSquare, Filter, CheckCircle2, CircleDashed, ArrowRightCircle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { db } from '@/lib/db';
 
-export const MitigationsTab = ({ threats }: { threats?: any[] }) => {
-  // Local state for actions to support drag-and-drop and exception justifications
-  const [actions, setActions] = useState<any[]>([]);
+export const MitigationsTab = ({ threats, modelId }: { threats?: any[], modelId?: string }) => {
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
 
   // Modal State for Exception Justification
@@ -12,37 +11,34 @@ export const MitigationsTab = ({ threats }: { threats?: any[] }) => {
   const [pendingExceptionAction, setPendingExceptionAction] = useState<string | null>(null);
   const [exceptionReason, setExceptionReason] = useState('');
 
-  // Initialize actions from threats when the component mounts
-  useEffect(() => {
-    if (threats && actions.length === 0) {
-      setActions(threats.map((t, idx) => ({
-        id: `ACT-${idx + 100}`,
-        threatId: t.id,
-        threatCategory: t.category || 'Uncategorized',
-        threatSeverity: t.severity || 'Medium',
-        title: `Remediate: ${t.title}`,
-        suggestedMitigation: t.mitigation || 'Implement standard security controls, enforce least privilege, and validate all inputs at the system boundaries to mitigate this risk.',
-        description: t.description || 'No detailed description provided for this threat.',
-        reasoning: t.reasoning || '',
-        effort: (t.severity === 'Critical' || t.severity === 'High') ? 'High' : t.severity === 'Medium' ? 'Medium' : 'Low',
-        status: 'Open',
-        controls: ['AC-1', 'SI-2'],
-        justification: ''
-      })));
-    }
-  }, [threats, actions.length]);
+  // Dynamically map actions from threats
+  const actions = useMemo(() => {
+    if (!threats) return [];
+    return threats.map((t) => ({
+      id: t.id,
+      threatId: t.id,
+      threatCategory: t.category || 'Uncategorized',
+      threatSeverity: t.severity || 'Medium',
+      title: `Remediate: ${t.title}`,
+      suggestedMitigation: t.mitigation || 'Implement standard security controls, enforce least privilege, and validate all inputs at the system boundaries to mitigate this risk.',
+      description: t.description || 'No detailed description provided for this threat.',
+      reasoning: t.reasoning || '',
+      effort: (t.severity === 'Critical' || t.severity === 'High') ? 'High' : t.severity === 'Medium' ? 'Medium' : 'Low',
+      status: t.status || 'Open',
+      controls: ['AC-1', 'SI-2'],
+      justification: t.justification || ''
+    }));
+  }, [threats]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Categories');
   const [selectedEffort, setSelectedEffort] = useState('All Efforts');
 
-  // Dynamically extract categories to match the framework methodology
   const categories = useMemo(() => {
     const cats = new Set(actions.map(a => a.threatCategory));
     return Array.from(cats).sort();
   }, [actions]);
 
-  // Apply filters
   const filteredActions = useMemo(() => {
     return actions.filter(a => {
       const matchesSearch = !searchQuery || 
@@ -79,47 +75,51 @@ export const MitigationsTab = ({ threats }: { threats?: any[] }) => {
     setExpandedCards(newSet);
   };
 
-  // Drag and Drop Handlers
   const handleDragStart = (e: React.DragEvent, id: string) => {
     e.dataTransfer.setData('actionId', id);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault(); // Necessary to allow drop
+    e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   };
 
-  const handleDrop = (e: React.DragEvent, newStatus: string) => {
+  const handleDrop = async (e: React.DragEvent, newStatus: string) => {
     e.preventDefault();
     const actionId = e.dataTransfer.getData('actionId');
-    if (!actionId) return;
+    if (!actionId || !threats || !modelId) return;
 
     const action = actions.find(a => a.id === actionId);
     if (!action || action.status === newStatus) return;
 
     if (newStatus === 'Exception') {
-      setPendingExceptionAction(actionId);
+      setPendingExceptionAction(action.threatId);
       setExceptionReason(action.justification || '');
       setExceptionModalOpen(true);
     } else {
-      setActions(prev => prev.map(a => a.id === actionId ? { ...a, status: newStatus } : a));
+      // Update local db
+      const updatedThreats = threats.map(t => 
+        t.id === action.threatId ? { ...t, status: newStatus } : t
+      );
+      await db.threatModels.update(modelId, { threats: updatedThreats });
       toast.success(`Task moved to ${newStatus}`);
     }
   };
 
-  const confirmException = () => {
+  const confirmException = async () => {
     if (!exceptionReason.trim()) {
       toast.error('A business or technical justification is strictly required for exceptions.');
       return;
     }
     
-    if (pendingExceptionAction) {
-      setActions(prev => prev.map(a => 
-        a.id === pendingExceptionAction 
-          ? { ...a, status: 'Exception', justification: exceptionReason.trim() } 
-          : a
-      ));
+    if (pendingExceptionAction && threats && modelId) {
+      const updatedThreats = threats.map(t => 
+        t.id === pendingExceptionAction 
+          ? { ...t, status: 'Exception', justification: exceptionReason.trim() } 
+          : t
+      );
+      await db.threatModels.update(modelId, { threats: updatedThreats });
       toast.success('Task moved to Exception successfully.');
     }
     
@@ -130,7 +130,6 @@ export const MitigationsTab = ({ threats }: { threats?: any[] }) => {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-secondary/10 h-full relative">
-      {/* Filters Header */}
       <div className="p-5 border-b border-border/50 bg-card shadow-sm z-10 flex flex-col gap-4">
         <div className="flex justify-between items-center">
           <h3 className="font-bold text-lg flex items-center gap-2">
@@ -204,7 +203,6 @@ export const MitigationsTab = ({ threats }: { threats?: any[] }) => {
         </div>
       </div>
 
-      {/* Kanban Board Area */}
       <div className="flex-1 overflow-x-auto overflow-y-hidden p-6">
         {filteredActions.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center border-2 border-dashed border-border/50 rounded-3xl bg-card/50 max-w-2xl mx-auto py-12">
@@ -347,7 +345,6 @@ export const MitigationsTab = ({ threats }: { threats?: any[] }) => {
         )}
       </div>
 
-      {/* Exception Justification Modal */}
       {isExceptionModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
           <div className="bg-card border border-border/50 rounded-3xl p-6 shadow-2xl w-full max-w-md animate-in fade-in zoom-in-95">
