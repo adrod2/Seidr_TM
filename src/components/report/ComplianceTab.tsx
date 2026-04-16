@@ -126,7 +126,7 @@ export const ComplianceTab = ({ gaps }: { gaps?: any[] }) => {
               <tr>
                 <th className="px-6 py-4 font-medium">Risk Name</th>
                 <th className="px-6 py-4 font-medium">Obligation</th>
-                <th className="px-6 py-4 font-medium">Impact Area</th>
+                <th className="px-6 py-4 font-medium">Due To</th>
                 <th className="px-6 py-4 font-medium">Alignment Status</th>
               </tr>
             </thead>
@@ -139,7 +139,7 @@ export const ComplianceTab = ({ gaps }: { gaps?: any[] }) => {
                   <tr key={risk.id} className="hover:bg-secondary/20 transition-colors">
                     <td className="px-6 py-4 font-bold text-foreground">{risk.name}</td>
                     <td className="px-6 py-4 text-muted-foreground">{risk.obligation}</td>
-                    <td className="px-6 py-4 font-medium">{risk.riskOf}</td>
+                    <td className="px-6 py-4 font-medium">{risk.dueTo}</td>
                     <td className="px-6 py-4">
                       {isExposed ? (
                         <div className="flex items-center gap-2 text-destructive">
