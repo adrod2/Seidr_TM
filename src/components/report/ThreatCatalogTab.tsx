@@ -16,7 +16,7 @@ const defaultThreats = [
   }
 ];
 
-export const ThreatCatalogTab = ({ threats, framework = 'STRIDE' }: { threats?: any[], framework?: string }) => {
+export const ThreatCatalogTab = ({ threats, framework = 'STRIDE', selectedThreatId }: { threats?: any[], framework?: string, selectedThreatId?: string | null }) => {
   const displayThreats = threats && threats.length > 0 ? threats : defaultThreats;
   
   const [expandedThreats, setExpandedThreats] = useState<Set<string>>(new Set());
@@ -63,6 +63,26 @@ export const ThreatCatalogTab = ({ threats, framework = 'STRIDE' }: { threats?: 
   };
 
   const hasActiveFilters = searchQuery !== '' || selectedCategory !== 'All Categories' || selectedSeverity !== 'All Severities';
+
+  React.useEffect(() => {
+    if (selectedThreatId) {
+        const element = document.getElementById(`threat-${selectedThreatId}`);
+        if (element) {
+            // Ensure the threat is visible by clearing filters that might hide it
+            clearFilters();
+            // Expand the threat details
+            setExpandedThreats(prev => new Set(prev).add(selectedThreatId));
+
+            setTimeout(() => {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                element.classList.add('ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-background');
+                setTimeout(() => {
+                    element.classList.remove('ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-background');
+                }, 2500);
+            }, 100); // Short delay to allow render after clearing filters
+        }
+    }
+  }, [selectedThreatId]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-secondary/10 h-full">
@@ -152,7 +172,7 @@ export const ThreatCatalogTab = ({ threats, framework = 'STRIDE' }: { threats?: 
             const isExpanded = expandedThreats.has(threat.id);
             
             return (
-              <div key={threat.id} className="border border-border/50 rounded-2xl p-5 hover:border-primary/50 transition-colors flex flex-col group bg-card shadow-sm hover:shadow-md">
+              <div key={threat.id} id={`threat-${threat.id}`} className="border border-border/50 rounded-2xl p-5 hover:border-primary/50 transition-colors flex flex-col group bg-card shadow-sm hover:shadow-md">
                 <div className="flex gap-4">
                   <div className={`mt-1 flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${
                     threat.severity === 'Critical' ? 'bg-destructive/10 text-destructive' : 

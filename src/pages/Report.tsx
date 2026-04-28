@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { ShieldAlert, GitMerge, CheckSquare, FileCheck, Download, Share2, Sparkles, Loader2, X } from 'lucide-react';
+import { ShieldAlert, GitMerge, CheckSquare, FileCheck, Download, Share2, Sparkles, Loader2, X, LayoutDashboard } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
@@ -11,6 +11,7 @@ import { ThreatCatalogTab } from '@/components/report/ThreatCatalogTab';
 import { C4ArchitectureTab } from '@/components/report/C4ArchitectureTab';
 import { MitigationsTab } from '@/components/report/MitigationsTab';
 import { ComplianceTab } from '@/components/report/ComplianceTab';
+import { FindingsTab } from '@/components/report/FindingsTab';
 import { CopilotSidebar } from '@/components/report/CopilotSidebar';
 import { PrintReport } from '@/components/report/PrintReport';
 import { TabButton } from '@/components/TabButton';
@@ -18,8 +19,9 @@ import { agentTranslateReport } from '@/lib/backend/agents';
 
 export const Report = () => {
   const { id } = useParams();
-  const [activeTab, setActiveTab] = useState('threats');
+  const [activeTab, setActiveTab] = useState('findings');
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
+  const [selectedThreatId, setSelectedThreatId] = useState<string | null>(null);
   
   // Export Modal State
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -147,17 +149,35 @@ export const Report = () => {
 
     if (exportLanguage !== 'en') {
       toast.promise(performExport(), {
-        loading: `Translating report to ${langLabel} (this may take a moment)...`,
-        success: `Translation complete. Preparing ${exportFormat.toUpperCase()}.`,
-        error: 'Failed to translate report. Check AI configuration.'
-      });
-    } else {
-      if (exportFormat === 'pdf') {
-        toast.info(`Preparing PDF... Please select "Save as PDF" as the destination.`, { duration: 4000 });
+          loading: `Translating report to ${langLabel} (this may take a moment)...`,
+          success: `Translation complete. Preparing ${exportFormat.toUpperCase()}.`,
+          error: 'Failed to translate report. Check AI configuration.'
+        });
+      } else {
+        if (exportFormat === 'pdf') {
+          toast.info(`Preparing PDF... Please select "Save as PDF" as the destination.`, { duration: 4000 });
+        }
+        performExport();
       }
-      performExport();
-    }
-  };
+    };
+  
+    const handleThreatSelect = (threatId: string) => {
+      setActiveTab('threats');
+      setSelectedThreatId(threatId);
+      // We set a timeout to allow the tab to switch and the component to render
+      // before we try to scroll to the element.
+      setTimeout(() => {
+          const element = document.getElementById(`threat-${threatId}`);
+          if (element) {
+              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              // Highlight the element briefly
+              element.classList.add('ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-background');
+              setTimeout(() => {
+                  element.classList.remove('ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-background');
+              }, 2000);
+          }
+      }, 100);
+    };
 
   return (
     <>
@@ -201,6 +221,7 @@ export const Report = () => {
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none shrink-0">
+          <TabButton active={activeTab === 'findings'} onClick={() => setActiveTab('findings')} icon={LayoutDashboard} label="Findings" />
           <TabButton active={activeTab === 'threats'} onClick={() => setActiveTab('threats')} icon={ShieldAlert} label="Threat Catalog" />
           <TabButton active={activeTab === 'c4'} onClick={() => setActiveTab('c4')} icon={GitMerge} label="C4 Architecture" />
           <TabButton active={activeTab === 'mitigations'} onClick={() => setActiveTab('mitigations')} icon={CheckSquare} label="Mitigation Plan" />
@@ -209,7 +230,8 @@ export const Report = () => {
 
         <div className="bg-card border border-border/50 rounded-3xl shadow-sm flex-1 mt-4 overflow-hidden flex">
           <div className="flex-1 flex flex-col min-w-0">
-            {activeTab === 'threats' && <ThreatCatalogTab threats={modelData.threats} framework={modelData.framework} />}
+            {activeTab === 'findings' && <FindingsTab threats={modelData.threats} model={modelData} onThreatSelect={handleThreatSelect} />}
+            {activeTab === 'threats' && <ThreatCatalogTab threats={modelData.threats} framework={modelData.framework} selectedThreatId={selectedThreatId} />}
             {activeTab === 'c4' && <C4ArchitectureTab srg={modelData.srg} modelId={modelData.id} />}
             {activeTab === 'mitigations' && <MitigationsTab threats={modelData.threats} modelId={modelData.id} />}
             {activeTab === 'compliance' && <ComplianceTab gaps={modelData.complianceGaps} />}
