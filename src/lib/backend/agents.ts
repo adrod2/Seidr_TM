@@ -1,12 +1,12 @@
 import { hashInput, getCachedResult, setCachedResult } from './agentCache';
 import { SystemRepresentationGraph, Threat, ComplianceGap } from './types';
 import { callLLM, callVisionLLM } from './llmClient';
+import { parseGitHubUrl, scanGitHubRepository } from './githubScanner';
 
 /**
  * Diagram Analysis Agent: Uses Vision LLMs to extract dense textual architecture details from an image.
  */
 export const agentAnalyzeDiagram = async (base64DataUrl: string): Promise<string> => {
-  // Hash the first 500 characters of the base64 string to keep it performant
   const hash = await hashInput(base64DataUrl.substring(0, 500)); 
   const cached = await getCachedResult<string>('diagramAnalysis', hash);
   if (cached) return cached;
@@ -69,26 +69,41 @@ Return ONLY a valid JSON object with this EXACT structure:
 };
 
 /**
- * Repository Analysis Agent: SAST and dependency heuristic scan
+ * Repository Analysis Agent: SAST and dependency heuristic scan via GitHub APIs
  */
 export const agentRepositoryAnalysis = async (repositoryUrl: string, context: string): Promise<{ inferredPurpose: string, inherentVulnerabilities: Threat[] }> => {
   const hash = await hashInput(`${repositoryUrl}_${context}`);
   const cached = await getCachedResult<any>('repoAnalysis', hash);
   if (cached) return cached;
 
-  const systemPrompt = `You are an expert static application security testing (SAST) and repository analysis agent.
-Given a repository URL and system context, perform a heuristic analysis to infer the repository's likely purpose, architecture, and technology stack.
-Identify 1-3 typical inherent code-level vulnerabilities (e.g., injection flaws, hardcoded secrets, insecure deserialization) that are statistically likely in this type of codebase based on standard patterns.
+  let repoContext = `Repository URL: ${repositoryUrl}\nContext: ${context}`;
+
+  // If it's a GitHub URL, parse it and fetch real file trees/manifests
+  const githubInfo = parseGitHubUrl(repositoryUrl);
+  if (githubInfo) {
+    const scanData = await scanGitHubRepository(githubInfo.owner, githubInfo.repo);
+    repoContext += `\n\n${scanData}`;
+  }
+
+  const systemPrompt = `You are an expert static application security testing (SAST), Software Composition Analysis (SCA), and repository analysis agent.
+Given the provided system context, repository metadata, file tree, and selected critical file contents, perform a deep architectural and security analysis.
+Infer the repository's precise purpose, architecture, and technology stack based on the actual files and manifests provided.
+Identify 1-3 inherent code-level vulnerabilities, misconfigurations, or supply-chain risks present in this codebase.
+
+CRITICAL INSTRUCTIONS:
+- Base your findings ON THE ACTUAL DATA provided (dependencies in package.json, exposed ports in Dockerfile, specific routing files, etc.).
+- Your "evidence" field MUST quote or specifically reference file paths, lines, or configurations directly from the provided file tree and contents.
+- If no critical files were successfully fetched, rely on the file tree structure to infer architecture and likely risks.
 
 Return ONLY a valid JSON object with this EXACT structure:
 {
-  "inferredPurpose": "A detailed explanation of what this repository likely does, its architecture, and tech stack.",
+  "inferredPurpose": "A detailed explanation of what this repository does, its architecture, and tech stack based on actual files.",
   "inherentVulnerabilities": [
     {
       "id": "SAST-001",
       "title": "string",
-      "description": "string (specific code-level vulnerability)",
-      "evidence": "string (explain why this codebase architecture is susceptible to this)",
+      "description": "string (specific code-level vulnerability or misconfiguration)",
+      "evidence": "string (MUST reference specific files, e.g., 'Found in /backend/Dockerfile exposing port 80 without TLS' or 'package.json includes vulnerable lib')",
       "reasoning": "string (explain step-by-step how an attacker might exploit this)",
       "category": "Code Vulnerability",
       "componentId": "Repository Codebase",
@@ -98,7 +113,7 @@ Return ONLY a valid JSON object with this EXACT structure:
   ]
 }`;
 
-  const result = await callLLM(systemPrompt, `Repository URL: ${repositoryUrl}\nContext: ${context}`);
+  const result = await callLLM(systemPrompt, repoContext);
   
   await setCachedResult('repoAnalysis', hash, result);
   return result as { inferredPurpose: string, inherentVulnerabilities: Threat[] };
