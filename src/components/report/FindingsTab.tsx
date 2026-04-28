@@ -19,35 +19,6 @@ interface FindingsTabProps {
   onThreatSelect: (threatId: string) => void;
 }
 
-const STRIDE_CATEGORIES = ["S", "T", "R", "I", "D", "E"];
-const PASTA_CATEGORIES = ["S1", "S2", "S3", "S4", "S5", "S6", "S7"];
-const MAESTRO_CATEGORIES = [
-  "C",
-  "R",
-  "A",
-  "I",
-  "N",
-  "E",
-  "L",
-  "A",
-  "P",
-  "S",
-  "E",
-];
-
-const getHeatmapCategories = (framework: string) => {
-  switch (framework.toUpperCase()) {
-    case "STRIDE":
-      return STRIDE_CATEGORIES;
-    case "PASTA":
-      return PASTA_CATEGORIES;
-    case "MAESTRO":
-      return MAESTRO_CATEGORIES;
-    default:
-      return STRIDE_CATEGORIES;
-  }
-};
-
 export function FindingsTab({
   threats,
   model,
@@ -106,17 +77,49 @@ export function FindingsTab({
     }));
   }, [threats]);
 
-  const heatmapCategories = getHeatmapCategories(model.framework || "STRIDE");
+  // Dynamically map columns based on framework and actual threat categories
+  const heatmapColumns = useMemo(() => {
+    const fw = (model.framework || "STRIDE").toUpperCase();
+    
+    if (fw === "STRIDE") {
+      return [
+        { id: "S", label: "Spoofing", match: (c: string) => c.toUpperCase().includes("SPOOF") },
+        { id: "T", label: "Tampering", match: (c: string) => c.toUpperCase().includes("TAMP") },
+        { id: "R", label: "Repudiation", match: (c: string) => c.toUpperCase().includes("REPUD") },
+        { id: "I", label: "Info Disclosure", match: (c: string) => c.toUpperCase().includes("INFO") || c.toUpperCase().includes("DISCLOSURE") },
+        { id: "D", label: "Denial of Service", match: (c: string) => c.toUpperCase().includes("DENIAL") || c.toUpperCase().includes("DOS") },
+        { id: "E", label: "Elevation of Privilege", match: (c: string) => c.toUpperCase().includes("ELEVAT") || c.toUpperCase().includes("PRIVILEGE") },
+      ];
+    }
+    
+    // Fallback: Dynamic column generation for PASTA, MAESTRO, or custom frameworks
+    const uniqueCats = Array.from(new Set(threats.map((t) => t.category || "Uncategorized")));
+    return uniqueCats.map((cat) => {
+      // Create a short acronym for the table header (e.g., "Stage 1" -> "S1")
+      const words = cat.split(/[\s_-]+/);
+      let shortId = cat.substring(0, 3).toUpperCase();
+      if (words.length > 1) {
+          shortId = words.map(w => w[0]).join('').substring(0, 3).toUpperCase();
+      }
+      return {
+        id: shortId,
+        label: cat,
+        match: (c: string) => c === cat,
+      };
+    });
+  }, [model.framework, threats]);
 
   const heatmapData = useMemo(() => {
     return components.map((component) => {
       const categoryCounts: { [key: string]: Threat[] } = {};
-      heatmapCategories.forEach((cat) => (categoryCounts[cat] = []));
+      heatmapColumns.forEach((col) => (categoryCounts[col.id] = []));
 
       component.threats.forEach((threat) => {
-        const category = threat.id.split("-")[0].toUpperCase();
-        if (categoryCounts[category]) {
-          categoryCounts[category].push(threat);
+        const threatCat = threat.category || "";
+        // Find which column this threat belongs to based on the category string
+        const matchedCol = heatmapColumns.find(col => col.match(threatCat));
+        if (matchedCol) {
+          categoryCounts[matchedCol.id].push(threat);
         }
       });
       return {
@@ -125,10 +128,10 @@ export function FindingsTab({
         total: component.threats.length,
       };
     });
-  }, [components, heatmapCategories]);
+  }, [components, heatmapColumns]);
 
   const getCellColor = (threats: Threat[]) => {
-    if (threats.length === 0) return "bg-gray-800";
+    if (threats.length === 0) return "bg-gray-800/40 border border-gray-800/60";
     const maxSeverity = Math.max(
       ...threats.map((t) => {
         if (t.severity === "Critical") return 4;
@@ -137,10 +140,10 @@ export function FindingsTab({
         return 1;
       })
     );
-    if (maxSeverity === 4) return "bg-red-600";
-    if (maxSeverity === 3) return "bg-orange-500";
-    if (maxSeverity === 2) return "bg-yellow-500";
-    return "bg-blue-500";
+    if (maxSeverity === 4) return "bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.4)]";
+    if (maxSeverity === 3) return "bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.4)]";
+    if (maxSeverity === 2) return "bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.4)]";
+    return "bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.4)]";
   };
 
   const architectureOverlayData = useMemo(() => {
@@ -205,8 +208,10 @@ export function FindingsTab({
               </div>
             </div>
             <div className="mt-4 text-center">
-                <p className="font-bold">RESIDUAL RISK POSTURE:</p>
-                <p>{findingsSummary.Critical} Critical - {findingsSummary.High} High</p>
+                <p className="font-bold text-gray-300 text-sm tracking-wide mb-1">RESIDUAL RISK POSTURE:</p>
+                <p className="text-lg">
+                  <span className="text-red-500 font-bold">{findingsSummary.Critical}</span> Critical - <span className="text-orange-500 font-bold">{findingsSummary.High}</span> High
+                </p>
             </div>
           </CardContent>
         </Card>
@@ -218,35 +223,39 @@ export function FindingsTab({
           <CardContent>
             <Table>
               <TableHeader>
-                <TableRow className="border-gray-700">
-                  <TableHead className="text-white">Component</TableHead>
-                  {heatmapCategories.map((cat) => (
-                    <TableHead key={cat} className="text-center text-white">
-                      {cat}
+                <TableRow className="border-gray-700 hover:bg-transparent">
+                  <TableHead className="text-gray-300">Component</TableHead>
+                  {heatmapColumns.map((col) => (
+                    <TableHead key={col.id} className="text-center text-gray-300" title={col.label}>
+                      {col.id}
                     </TableHead>
                   ))}
-                  <TableHead className="text-right text-white">Total</TableHead>
+                  <TableHead className="text-right text-gray-300">Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {heatmapData.map((row) => (
-                  <TableRow key={row.componentName} className="border-gray-700">
+                  <TableRow key={row.componentName} className="border-gray-700 hover:bg-gray-800/50">
                     <TableCell className="font-medium">
                       {row.componentName}
                     </TableCell>
-                    {heatmapCategories.map((cat) => (
-                      <TableCell key={cat} className="p-1">
-                        <div
-                          className={cn(
-                            "w-full h-8 rounded-md cursor-pointer",
-                            getCellColor(row.categories[cat]),
-                            row.categories[cat].length > 0 ? 'hover:ring-2 hover:ring-blue-400' : ''
-                          )}
-                          onClick={() => row.categories[cat].length > 0 && onThreatSelect(row.categories[cat][0].id)}
-                        />
-                      </TableCell>
-                    ))}
-                    <TableCell className="text-right">{row.total}</TableCell>
+                    {heatmapColumns.map((col) => {
+                      const cellThreats = row.categories[col.id];
+                      return (
+                        <TableCell key={col.id} className="p-2">
+                          <div
+                            title={`${col.label}: ${cellThreats.length} finding(s)`}
+                            className={cn(
+                              "w-full h-8 rounded-md cursor-pointer transition-all duration-200",
+                              getCellColor(cellThreats),
+                              cellThreats.length > 0 ? 'hover:scale-105 hover:ring-2 hover:ring-white/50' : ''
+                            )}
+                            onClick={() => cellThreats.length > 0 && onThreatSelect(cellThreats[0].id)}
+                          />
+                        </TableCell>
+                      );
+                    })}
+                    <TableCell className="text-right font-mono text-gray-300">{row.total}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -263,24 +272,24 @@ export function FindingsTab({
           <CardContent>
             <Table>
               <TableHeader>
-                <TableRow className="border-gray-700">
-                  <TableHead className="text-white">Component</TableHead>
-                  <TableHead className="text-white">Risk Weight</TableHead>
-                  <TableHead className="text-white">Findings</TableHead>
-                  <TableHead className="text-white">Key Risk</TableHead>
+                <TableRow className="border-gray-700 hover:bg-transparent">
+                  <TableHead className="text-gray-300">Component</TableHead>
+                  <TableHead className="text-gray-300">Risk Weight</TableHead>
+                  <TableHead className="text-gray-300 text-center">Findings</TableHead>
+                  <TableHead className="text-gray-300">Key Risk</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {architectureOverlayData.map((row) => (
-                  <TableRow key={row.name} className="border-gray-700">
-                    <TableCell>{row.name}</TableCell>
+                  <TableRow key={row.name} className="border-gray-700 hover:bg-gray-800/50">
+                    <TableCell className="font-medium">{row.name}</TableCell>
                     <TableCell>
-                        <span className={cn("font-bold", getSeverityColor(row.riskWeight, true))}>
+                        <span className={cn("font-bold px-2.5 py-1 rounded-md text-xs", getSeverityColor(row.riskWeight, true))}>
                             {row.riskWeight}
                         </span>
                     </TableCell>
-                    <TableCell>{row.findings}</TableCell>
-                    <TableCell>{row.keyRisk}</TableCell>
+                    <TableCell className="text-center font-mono">{row.findings}</TableCell>
+                    <TableCell className="text-gray-400 text-sm">{row.keyRisk}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -291,27 +300,27 @@ export function FindingsTab({
           <CardHeader>
             <CardTitle>Top Findings</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             {topFindings.map((threat) => (
               <div
                 key={threat.id}
-                className="p-3 bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-700"
+                className="p-4 bg-gray-800/50 border border-gray-700/50 rounded-xl cursor-pointer hover:bg-gray-800 hover:border-gray-600 transition-all"
                 onClick={() => onThreatSelect(threat.id)}
               >
-                <div className="flex justify-between items-start">
-                  <p className="font-bold text-sm">
-                    {threat.id} | {threat.componentId}
+                <div className="flex justify-between items-start mb-2">
+                  <p className="font-mono text-xs text-gray-400 bg-gray-900 px-2 py-1 rounded">
+                    {threat.componentId}
                   </p>
                   <span
                     className={cn(
-                      "text-sm font-bold",
-                      getSeverityColor(threat.severity)
+                      "text-xs font-bold px-2 py-1 rounded",
+                      getSeverityColor(threat.severity, true)
                     )}
                   >
                     {threat.severity} ({threat.cvssScore.toFixed(1)})
                   </span>
                 </div>
-                <p className="text-sm text-gray-300">{threat.title}</p>
+                <p className="text-sm text-gray-200 font-medium leading-snug">{threat.title}</p>
               </div>
             ))}
           </CardContent>
