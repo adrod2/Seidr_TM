@@ -116,7 +116,6 @@ export function FindingsTab({
 
       component.threats.forEach((threat) => {
         const threatCat = threat.category || "";
-        // Find which column this threat belongs to based on the category string
         const matchedCol = heatmapColumns.find(col => col.match(threatCat));
         if (matchedCol) {
           categoryCounts[matchedCol.id].push(threat);
@@ -131,7 +130,7 @@ export function FindingsTab({
   }, [components, heatmapColumns]);
 
   const getCellColor = (threats: Threat[]) => {
-    if (threats.length === 0) return "bg-gray-800/40 border border-gray-800/60";
+    if (threats.length === 0) return "bg-secondary/50 border border-border/50";
     const maxSeverity = Math.max(
       ...threats.map((t) => {
         if (t.severity === "Critical") return 4;
@@ -167,9 +166,9 @@ export function FindingsTab({
   }, [components]);
 
   return (
-    <div className="space-y-6 p-4 md:p-6 text-white">
+    <div className="space-y-6 p-4 md:p-6 text-foreground">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-1 bg-gray-900 border-gray-700">
+        <Card className="lg:col-span-1 bg-card border-border/50 shadow-sm">
           <CardHeader>
             <CardTitle>Findings Summary</CardTitle>
           </CardHeader>
@@ -195,7 +194,7 @@ export function FindingsTab({
                   </Pie>
                   <Legend
                     formatter={(value, entry) => (
-                      <span className="text-white">
+                      <span className="text-foreground font-medium">
                         {value} ({entry.payload?.value})
                       </span>
                     )}
@@ -204,11 +203,11 @@ export function FindingsTab({
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-4xl font-bold">{totalFindings}</span>
-                <span className="text-sm text-gray-400">findings</span>
+                <span className="text-sm text-muted-foreground">findings</span>
               </div>
             </div>
             <div className="mt-4 text-center">
-                <p className="font-bold text-gray-300 text-sm tracking-wide mb-1">RESIDUAL RISK POSTURE:</p>
+                <p className="font-bold text-muted-foreground text-sm tracking-wide mb-1">RESIDUAL RISK POSTURE:</p>
                 <p className="text-lg">
                   <span className="text-red-500 font-bold">{findingsSummary.Critical}</span> Critical - <span className="text-orange-500 font-bold">{findingsSummary.High}</span> High
                 </p>
@@ -216,27 +215,27 @@ export function FindingsTab({
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2 bg-gray-900 border-gray-700">
+        <Card className="lg:col-span-2 bg-card border-border/50 shadow-sm">
           <CardHeader>
             <CardTitle>Residual Coverage Heat Map</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
-                <TableRow className="border-gray-700 hover:bg-transparent">
-                  <TableHead className="text-gray-300">Component</TableHead>
+                <TableRow className="border-border/50 hover:bg-transparent">
+                  <TableHead className="text-muted-foreground">Component</TableHead>
                   {heatmapColumns.map((col) => (
-                    <TableHead key={col.id} className="text-center text-gray-300" title={col.label}>
+                    <TableHead key={col.id} className="text-center text-muted-foreground" title={col.label}>
                       {col.id}
                     </TableHead>
                   ))}
-                  <TableHead className="text-right text-gray-300">Total</TableHead>
+                  <TableHead className="text-right text-muted-foreground">Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {heatmapData.map((row) => (
-                  <TableRow key={row.componentName} className="border-gray-700 hover:bg-gray-800/50">
-                    <TableCell className="font-medium">
+                  <TableRow key={row.componentName} className="border-border/50 hover:bg-muted/50 transition-colors">
+                    <TableCell className="font-medium text-foreground">
                       {row.componentName}
                     </TableCell>
                     {heatmapColumns.map((col) => {
@@ -248,14 +247,14 @@ export function FindingsTab({
                             className={cn(
                               "w-full h-8 rounded-md cursor-pointer transition-all duration-200",
                               getCellColor(cellThreats),
-                              cellThreats.length > 0 ? 'hover:scale-105 hover:ring-2 hover:ring-white/50' : ''
+                              cellThreats.length > 0 ? 'hover:scale-105 hover:ring-2 hover:ring-primary/50' : ''
                             )}
                             onClick={() => cellThreats.length > 0 && onThreatSelect(cellThreats[0].id)}
                           />
                         </TableCell>
                       );
                     })}
-                    <TableCell className="text-right font-mono text-gray-300">{row.total}</TableCell>
+                    <TableCell className="text-right font-mono text-muted-foreground">{row.total}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -265,38 +264,39 @@ export function FindingsTab({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2 bg-gray-900 border-gray-700">
+        <Card className="lg:col-span-2 bg-card border-border/50 shadow-sm">
           <CardHeader>
             <CardTitle>Architecture Threat Overlay</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
-                <TableRow className="border-gray-700 hover:bg-transparent">
-                  <TableHead className="text-gray-300">Component</TableHead>
-                  <TableHead className="text-gray-300">Risk Weight</TableHead>
-                  <TableHead className="text-gray-300 text-center">Findings</TableHead>
-                  <TableHead className="text-gray-300">Key Risk</TableHead>
+                <TableRow className="border-border/50 hover:bg-transparent">
+                  <TableHead className="text-muted-foreground">Component</TableHead>
+                  <TableHead className="text-muted-foreground">Risk Weight</TableHead>
+                  <TableHead className="text-muted-foreground text-center">Findings</TableHead>
+                  <TableHead className="text-muted-foreground">Key Risk</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {architectureOverlayData.map((row) => (
-                  <TableRow key={row.name} className="border-gray-700 hover:bg-gray-800/50">
-                    <TableCell className="font-medium">{row.name}</TableCell>
+                  <TableRow key={row.name} className="border-border/50 hover:bg-muted/50 transition-colors">
+                    <TableCell className="font-medium text-foreground">{row.name}</TableCell>
                     <TableCell>
                         <span className={cn("font-bold px-2.5 py-1 rounded-md text-xs", getSeverityColor(row.riskWeight, true))}>
                             {row.riskWeight}
                         </span>
                     </TableCell>
-                    <TableCell className="text-center font-mono">{row.findings}</TableCell>
-                    <TableCell className="text-gray-400 text-sm">{row.keyRisk}</TableCell>
+                    <TableCell className="text-center font-mono text-foreground">{row.findings}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{row.keyRisk}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
-        <Card className="bg-gray-900 border-gray-700">
+        
+        <Card className="bg-card border-border/50 shadow-sm">
           <CardHeader>
             <CardTitle>Top Findings</CardTitle>
           </CardHeader>
@@ -304,11 +304,11 @@ export function FindingsTab({
             {topFindings.map((threat) => (
               <div
                 key={threat.id}
-                className="p-4 bg-gray-800/50 border border-gray-700/50 rounded-xl cursor-pointer hover:bg-gray-800 hover:border-gray-600 transition-all"
+                className="p-4 bg-secondary/30 border border-border/50 rounded-xl cursor-pointer hover:bg-secondary/80 hover:border-primary/50 transition-all"
                 onClick={() => onThreatSelect(threat.id)}
               >
                 <div className="flex justify-between items-start mb-2">
-                  <p className="font-mono text-xs text-gray-400 bg-gray-900 px-2 py-1 rounded">
+                  <p className="font-mono text-xs text-muted-foreground bg-background px-2 py-1 rounded border border-border/50 shadow-sm">
                     {threat.componentId}
                   </p>
                   <span
@@ -320,7 +320,7 @@ export function FindingsTab({
                     {threat.severity} ({threat.cvssScore.toFixed(1)})
                   </span>
                 </div>
-                <p className="text-sm text-gray-200 font-medium leading-snug">{threat.title}</p>
+                <p className="text-sm text-foreground font-medium leading-snug">{threat.title}</p>
               </div>
             ))}
           </CardContent>
