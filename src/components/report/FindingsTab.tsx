@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -8,14 +7,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Model, Threat } from "@/lib/backend/types";
+import { Threat } from "@/lib/backend/types";
+import { ThreatModel } from "@/lib/db";
 import { cn, getSeverityColor } from "@/lib/utils";
 import { useMemo } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from "recharts";
 
 interface FindingsTabProps {
   threats: Threat[];
-  model: Model;
+  model: ThreatModel;
   onThreatSelect: (threatId: string) => void;
 }
 
@@ -86,7 +86,7 @@ export function FindingsTab({
   const topFindings = useMemo(
     () =>
       [...threats]
-        .sort((a, b) => b.cvss - a.cvss)
+        .sort((a, b) => b.cvssScore - a.cvssScore)
         .slice(0, 5),
     [threats]
   );
@@ -94,7 +94,7 @@ export function FindingsTab({
   const components = useMemo(() => {
     const componentMap = new Map<string, Threat[]>();
     threats.forEach((threat) => {
-      const componentName = threat.component || "Other";
+      const componentName = threat.componentId || "Other";
       if (!componentMap.has(componentName)) {
         componentMap.set(componentName, []);
       }
@@ -106,7 +106,7 @@ export function FindingsTab({
     }));
   }, [threats]);
 
-  const heatmapCategories = getHeatmapCategories(model.framework);
+  const heatmapCategories = getHeatmapCategories(model.framework || "STRIDE");
 
   const heatmapData = useMemo(() => {
     return components.map((component) => {
@@ -300,7 +300,7 @@ export function FindingsTab({
               >
                 <div className="flex justify-between items-start">
                   <p className="font-bold text-sm">
-                    {threat.id} | {threat.component}
+                    {threat.id} | {threat.componentId}
                   </p>
                   <span
                     className={cn(
@@ -308,7 +308,7 @@ export function FindingsTab({
                       getSeverityColor(threat.severity)
                     )}
                   >
-                    {threat.severity} ({threat.cvss.toFixed(1)})
+                    {threat.severity} ({threat.cvssScore.toFixed(1)})
                   </span>
                 </div>
                 <p className="text-sm text-gray-300">{threat.title}</p>
