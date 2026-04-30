@@ -175,7 +175,7 @@ export function FindingsTab({
   }, [components]);
 
   return (
-    <div className="space-y-6 p-4 md:p-6 text-foreground">
+    <div className="flex-1 overflow-y-auto h-full space-y-6 p-4 md:p-6 text-foreground bg-secondary/5">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-1 bg-card border-border/50 shadow-sm">
           <CardHeader>
