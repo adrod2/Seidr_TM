@@ -49,6 +49,7 @@ const C4ArchitectureContent = ({ srg, modelId }: { srg?: any, modelId?: string }
       const c4Type = c.c4Type || (c.type === 'ExternalEntity' ? 'Person' : c.type === 'DataStore' ? 'Database' : 'Container');
 
       const nodeData = {
+        id: c.id,
         label: c.name,
         type: c4Type,
         description: c.description,
@@ -219,12 +220,21 @@ const C4ArchitectureContent = ({ srg, modelId }: { srg?: any, modelId?: string }
     setNodes(currentNodes => {
       const updatedNodes = [...currentNodes];
       
-      const applyTierPositions = (group: any[], yPos: number) => {
-        const spacingX = 300;
-        const startX = -((group.length - 1) * spacingX) / 2; // Center horizontally around x=0
-        
+      const applyTierPositions = (group: any[], startY: number) => {
+        if (group.length === 0) return startY;
+        const spacingX = 320;
+        const spacingY = 220;
+        const maxCols = 4; // Max nodes per row to prevent excessive width
+
         group.forEach((node, index) => {
-          const newPos = { x: startX + index * spacingX, y: yPos };
+          const row = Math.floor(index / maxCols);
+          const col = index % maxCols;
+          
+          // Calculate items in the specific row to center it
+          const itemsInRow = Math.min(maxCols, group.length - row * maxCols);
+          const startX = -((itemsInRow - 1) * spacingX) / 2;
+          
+          const newPos = { x: startX + col * spacingX, y: startY + row * spacingY };
           
           // Update React Flow Node
           const nodeIndex = updatedNodes.findIndex(n => n.id === node.id);
@@ -245,16 +255,20 @@ const C4ArchitectureContent = ({ srg, modelId }: { srg?: any, modelId?: string }
             return next;
           });
         });
+
+        const rows = Math.ceil(group.length / maxCols);
+        return startY + (rows * spacingY); // Return the next available Y coordinate
       };
 
-      applyTierPositions(typeGroups.Person, 0);
-      applyTierPositions(typeGroups.App, 250);
-      applyTierPositions(typeGroups.Database, 500);
+      let nextY = 0;
+      nextY = applyTierPositions(typeGroups.Person, nextY) + 50;
+      nextY = applyTierPositions(typeGroups.App, nextY) + 50;
+      applyTierPositions(typeGroups.Database, nextY);
 
       return updatedNodes;
     });
 
-    toast.success('Auto-layout applied!');
+    toast.success('Grid auto-layout applied!');
     
     // Fit view slightly after layout update
     setTimeout(() => {

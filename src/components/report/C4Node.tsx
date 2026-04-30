@@ -16,14 +16,14 @@ export const C4Node = ({ data }: any) => {
         {/* Title inherits color directly from containerStyle */}
         <h3 className="font-bold text-[15px] leading-tight mb-1">{data.label}</h3>
         
-        {/* Type badge uses dynamic colors */}
-        <p className={`text-[10px] uppercase tracking-wider font-bold px-2.5 py-0.5 rounded-md border border-current/20 ${data.typeText}`}>
-          [{data.type}]
+        {/* Type & ID badge uses dynamic colors */}
+        <p className={`text-[10px] tracking-wider font-bold px-2.5 py-0.5 rounded-md border border-current/20 ${data.typeText} mb-2`}>
+          <span className="font-mono uppercase text-current">{data.id}</span> • [{data.type}]
         </p>
         
         {/* Rich Description Box */}
         {data.description && (
-          <div className={`mt-4 w-full backdrop-blur-sm rounded-xl p-3 border border-current/10 text-left ${data.descBg}`}>
+          <div className={`mt-2 w-full backdrop-blur-sm rounded-xl p-3 border border-current/10 text-left ${data.descBg}`}>
             <p className={`text-[11px] leading-relaxed ${data.descText}`}>
               {data.description}
             </p>

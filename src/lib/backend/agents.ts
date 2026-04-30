@@ -36,19 +36,17 @@ Given the comprehensive system context, extract MAXIMUM details to build Level 1
 - Level 2 (L2): Break down the main system into internal containers (Web App, API Gateway, Microservices, Databases).
 - Level 3 (L3): Break down the containers into specific components (Controllers, Services, Repositories, Security Modules).
 
-CRITICAL INSTRUCTION FOR DESCRIPTIONS:
-The "description" field for EVERY component MUST contain actual, real data from the input. DO NOT use generic phrases like "A database" or "A frontend". 
-Instead, specify exactly what it does, the precise technologies used (e.g., AWS, PostgreSQL, React, Auth0), and the specific data it processes based on the provided context. If a technology is not specified, infer its purpose precisely from the context.
+CRITICAL INSTRUCTION FOR COMPONENT IDs:
+The "id" field MUST be a highly descriptive, readable identifier (e.g., "API-GW", "AUTH-DB", "WEB-CLIENT"). Do not use generic IDs like "c1" or "c2". These IDs must perfectly match the identifiers used in threat modeling later.
 
-Rules for 'c4Level': 
-- Use 'Global' for Persons/External Systems that appear across all levels.
-- Use 'L1', 'L2', or 'L3' appropriately for the systems, containers, and components.
+CRITICAL INSTRUCTION FOR DESCRIPTIONS:
+The "description" field for EVERY component MUST contain actual, real data from the input. DO NOT use generic phrases. Specify exact technologies (AWS, React) and specific data processed based on context.
 
 Return ONLY a valid JSON object with this EXACT structure:
 {
   "components": [ 
     { 
-      "id": "c1", 
+      "id": "API-GW", 
       "name": "string", 
       "type": "Process" | "DataStore" | "ExternalEntity" | "DataFlow",
       "c4Type": "Person" | "System" | "Container" | "Database" | "Component",
@@ -57,7 +55,7 @@ Return ONLY a valid JSON object with this EXACT structure:
     } 
   ],
   "edges": [ 
-    { "id": "e1", "sourceId": "c1", "targetId": "c2", "protocol": "HTTPS", "label": "description of the action" } 
+    { "id": "e1", "sourceId": "API-GW", "targetId": "AUTH-DB", "protocol": "HTTPS", "label": "description of the action" } 
   ],
   "trustBoundaries": [ "Internet", "VPC" ]
 }`;
@@ -143,7 +141,7 @@ Return ONLY a valid JSON array of objects with this EXACT structure:
     "evidence": "string (point out the exact components, missing boundaries in the SRG, OR specific clues from the System Context that prove this threat exists)",
     "reasoning": "string (explain step-by-step how an attacker would exploit this vulnerability)",
     "category": "string (the threat category according to the ${framework} framework)", 
-    "componentId": "string (name of the vulnerable component)", 
+    "componentId": "string (name of the vulnerable component from the SRG id or name)", 
     "cvssScore": 8.5, 
     "severity": "Critical" | "High" | "Medium" | "Low" 
   }

@@ -23,7 +23,7 @@ export interface AnalysisPayload {
 
 export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress: (step: number) => void) => {
   try {
-    // Fetch global system context documents
+    // 1. Fetch global system context documents (Organizational Knowledge)
     const globalDocs = await db.documents.toArray();
     let globalContextStr = "";
     if (globalDocs.length > 0) {
@@ -31,32 +31,33 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
         globalDocs.map(d => `Document: ${d.name}\n${d.content}`).join('\n\n');
     }
 
-    const fullContext = `
+    // 2. Isolate User-Provided Context (Architecture specifics)
+    const userContextStr = `
       System Description: ${payload.description || 'Not provided'}
       Deployment Model: ${payload.questionnaire?.deployment.join(', ') || 'Unknown'}
       Authentication: ${payload.questionnaire?.authMethods.join(', ') || 'Unknown'}
       Data Classification: ${payload.questionnaire?.dataClassification || 'Unknown'}
       Repository: ${payload.repositoryUrl || 'None'}
       Additional Docs [${payload.documentation?.title || 'Untitled'}]: ${payload.documentation?.content || 'None'}
-      ${globalContextStr}
     `.trim();
 
     onProgress(0);
-    const { sanitisedInput, piiRedactedCount } = runSecurityPipeline(fullContext);
+    // Sanitize ONLY the user inputs
+    const { sanitisedInput, piiRedactedCount } = runSecurityPipeline(userContextStr);
 
     if (piiRedactedCount > 0) {
       console.log(`[Audit] Redacted ${piiRedactedCount} PII elements from input`);
     }
 
     onProgress(1);
-    let finalInput = sanitisedInput;
+    let c4Context = sanitisedInput; // C4 Agent will only see User Inputs
     let repoThreats: Threat[] = [];
     let repoScannedFiles: { path: string, size: number }[] = [];
     
     if (payload.repositoryUrl) {
       try {
         const repoAnalysis = await agentRepositoryAnalysis(payload.repositoryUrl, sanitisedInput);
-        finalInput += `\n\nRepository Inferred Purpose:\n${repoAnalysis.inferredPurpose}`;
+        c4Context += `\n\nRepository Inferred Purpose:\n${repoAnalysis.inferredPurpose}`;
         repoThreats = repoAnalysis.inherentVulnerabilities || [];
         repoScannedFiles = repoAnalysis.scannedFiles || [];
       } catch (e) {
@@ -67,7 +68,8 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     }
 
     onProgress(2);
-    const srg = await agentC4Architect(finalInput);
+    // Generate C4 strictly from user context
+    const srg = await agentC4Architect(c4Context);
 
     onProgress(3);
     await new Promise(resolve => setTimeout(resolve, 800)); // Visual buffer for Identifying trust boundaries
@@ -75,18 +77,19 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     onProgress(4);
     const framework = payload.frameworks[0] || 'STRIDE';
     
-    // Pass the SRG, framework, AND the finalInput (which contains text, documents, and repo analysis)
-    const archThreats = await agentThreatModeling(srg, framework, finalInput);
+    // Threat modeling utilizes BOTH user architecture context AND global organizational policies
+    const fullContextForThreats = c4Context + globalContextStr;
+    const archThreats = await agentThreatModeling(srg, framework, fullContextForThreats);
     
     // Combine architecture threats and SAST repo threats
     let allThreats = [...archThreats, ...repoThreats].sort((a, b) => b.cvssScore - a.cvssScore);
 
     onProgress(5);
     
-    // Generate tailored mitigations for the top threats (limit to top 10 to manage API latency/costs)
+    // Generate tailored mitigations for the top threats
     const topThreatsToMitigate = allThreats.slice(0, 10);
     const mitigationPromises = topThreatsToMitigate.map(threat => 
-      agentMitigationStrategist(threat, finalInput)
+      agentMitigationStrategist(threat, fullContextForThreats)
         .then(strategy => { threat.mitigation = strategy; })
         .catch(err => { console.warn(`Failed to generate mitigation for ${threat.id}`, err); })
     );
@@ -94,11 +97,9 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
 
     onProgress(6);
     
-    // Look for the specific MMapp controls CSV file in the organizational knowledge base
+    // Evaluate Compliance
     const mmappDoc = globalDocs.find(d => d.name.toLowerCase().includes('mmapp controls.csv'));
     const customControlsContext = mmappDoc?.content || '';
-    
-    // Evaluate against the specifically mapped controls if found, or standard NIST if not
     const complianceGaps = await agentCompliance(allThreats, customControlsContext);
 
     onProgress(7);
@@ -111,16 +112,14 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     
     const riskScore = Math.min(100, Math.round(avgScore * 10 * riskMultiplier));
 
-    // Generate a clear, unique Model ID (e.g., TM-LQYE10B-X4A1)
     const timestampStr = Date.now().toString(36).toUpperCase();
     const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
     const newModelId = `TM-${timestampStr}-${randomStr}`;
 
-    // Save to Local Dexie DB
     await db.threatModels.put({
       id: newModelId,
       name: payload.name || 'Untitled Threat Model',
-      description: finalInput,
+      description: fullContextForThreats, // Save full context for the report
       riskScore: riskScore,
       date: new Date().toISOString(),
       status: 'Completed',
