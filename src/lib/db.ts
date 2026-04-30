@@ -11,6 +11,13 @@ export interface ThreatModel {
   threats: any[];
   complianceGaps: any[];
   framework?: string;
+  assessmentMeta?: {
+    diagramsCount: number;
+    repositoryUrl?: string;
+    localDocuments: string[];
+    globalDocuments: string[];
+    scannedFiles?: { path: string; size: number }[];
+  };
 }
 
 export interface AiConfig {

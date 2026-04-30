@@ -43,7 +43,9 @@ export const parseGitHubUrl = (url: string) => {
   return null;
 };
 
-export const scanGitHubRepository = async (owner: string, repo: string): Promise<string> => {
+export const scanGitHubRepository = async (owner: string, repo: string): Promise<{ contextString: string, scannedFiles: { path: string, size: number }[] }> => {
+  const scannedFiles: { path: string, size: number }[] = [];
+
   try {
     // 1. Fetch Metadata
     const metaRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
@@ -78,6 +80,7 @@ export const scanGitHubRepository = async (owner: string, repo: string): Promise
       const filename = path.split('/').pop() || '';
       if (PRIORITY_FILES.some(regex => regex.test(filename) || regex.test(path))) {
         priorityPaths.push(path);
+        scannedFiles.push({ path, size: item.size || 0 });
       }
     }
 
@@ -119,10 +122,13 @@ export const scanGitHubRepository = async (owner: string, repo: string): Promise
       result += `\nFile: ${file.path}\n\`\`\`\n${file.content}\n\`\`\`\n`;
     }
 
-    return result;
+    return { contextString: result, scannedFiles };
 
   } catch (error: any) {
     console.warn("GitHub Scan Failed:", error);
-    return `Failed to deeply scan repository: ${error.message}. Proceeding with heuristic analysis based on URL only.`;
+    return { 
+      contextString: `Failed to deeply scan repository: ${error.message}. Proceeding with heuristic analysis based on URL only.`,
+      scannedFiles 
+    };
   }
 };

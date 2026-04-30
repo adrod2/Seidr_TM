@@ -71,24 +71,26 @@ Return ONLY a valid JSON object with this EXACT structure:
 /**
  * Repository Analysis Agent: SAST and dependency heuristic scan via GitHub APIs
  */
-export const agentRepositoryAnalysis = async (repositoryUrl: string, context: string): Promise<{ inferredPurpose: string, inherentVulnerabilities: Threat[] }> => {
+export const agentRepositoryAnalysis = async (repositoryUrl: string, context: string): Promise<{ inferredPurpose: string, inherentVulnerabilities: Threat[], scannedFiles: { path: string, size: number }[] }> => {
   const hash = await hashInput(`${repositoryUrl}_${context}`);
   const cached = await getCachedResult<any>('repoAnalysis', hash);
   if (cached) return cached;
 
   let repoContext = `Repository URL: ${repositoryUrl}\nContext: ${context}`;
+  let scannedFiles: { path: string, size: number }[] = [];
 
   // If it's a GitHub URL, parse it and fetch real file trees/manifests
   const githubInfo = parseGitHubUrl(repositoryUrl);
   if (githubInfo) {
     const scanData = await scanGitHubRepository(githubInfo.owner, githubInfo.repo);
-    repoContext += `\n\n${scanData}`;
+    repoContext += `\n\n${scanData.contextString}`;
+    scannedFiles = scanData.scannedFiles;
   }
 
   const systemPrompt = `You are an expert static application security testing (SAST), Software Composition Analysis (SCA), and repository analysis agent.
 Given the provided system context, repository metadata, file tree, and selected critical file contents, perform a deep architectural and security analysis.
 Infer the repository's precise purpose, architecture, and technology stack based on the actual files and manifests provided.
-Identify 1-5 inherent code-level vulnerabilities, misconfigurations, or supply-chain risks present in this codebase.
+Identify 1-3 inherent code-level vulnerabilities, misconfigurations, or supply-chain risks present in this codebase.
 
 CRITICAL INSTRUCTIONS:
 - Base your findings ON THE ACTUAL DATA provided (dependencies in package.json, exposed ports in Dockerfile, specific routing files, etc.).
@@ -115,8 +117,9 @@ Return ONLY a valid JSON object with this EXACT structure:
 
   const result = await callLLM(systemPrompt, repoContext);
   
-  await setCachedResult('repoAnalysis', hash, result);
-  return result as { inferredPurpose: string, inherentVulnerabilities: Threat[] };
+  const finalResult = { ...(result as any), scannedFiles };
+  await setCachedResult('repoAnalysis', hash, finalResult);
+  return finalResult;
 };
 
 /**

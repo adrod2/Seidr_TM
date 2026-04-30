@@ -171,6 +171,8 @@ export const NewModel = () => {
         description: payloadDesc,
         frameworks: [selectedFramework],
         repositoryUrl: repoUrl,
+        diagramsCount: uploadedDiagrams.length,
+        localDocuments: uploadedDocs.map(d => d.name)
       },
       (stepNumber) => {
         setCurrentStep(stepNumber);

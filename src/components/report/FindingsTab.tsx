@@ -12,12 +12,21 @@ import { ThreatModel } from "@/lib/db";
 import { cn, getSeverityColor } from "@/lib/utils";
 import { useMemo } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from "recharts";
+import { Database, FileText, Globe, Paperclip, Image as ImageIcon, Github, FolderGit2 } from "lucide-react";
 
 interface FindingsTabProps {
   threats: Threat[];
   model: ThreatModel;
   onThreatSelect: (threatId: string) => void;
 }
+
+const formatBytes = (bytes: number) => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
 
 export function FindingsTab({
   threats,
@@ -326,6 +335,93 @@ export function FindingsTab({
           </CardContent>
         </Card>
       </div>
+
+      {model.assessmentMeta && (
+        <Card className="bg-card border-border/50 shadow-sm mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5 text-primary" />
+              Assessment Scope & Knowledge Base
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Context Documents */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                  <FileText className="h-4 w-4" /> Context Documents
+                </h4>
+                <div className="space-y-2">
+                  {model.assessmentMeta.globalDocuments.length > 0 || model.assessmentMeta.localDocuments.length > 0 ? (
+                    <>
+                      {model.assessmentMeta.globalDocuments.map(doc => (
+                         <div key={doc} className="flex items-center gap-2 text-sm bg-secondary/30 px-3 py-2 rounded-lg border border-border/50">
+                           <Globe className="h-4 w-4 flex-shrink-0 text-blue-500" /> 
+                           <span className="truncate font-medium">{doc}</span> 
+                           <span className="text-[10px] bg-secondary border border-border/50 px-1.5 py-0.5 rounded ml-auto flex-shrink-0">Global</span>
+                         </div>
+                      ))}
+                      {model.assessmentMeta.localDocuments.map(doc => (
+                         <div key={doc} className="flex items-center gap-2 text-sm bg-secondary/30 px-3 py-2 rounded-lg border border-border/50">
+                           <Paperclip className="h-4 w-4 flex-shrink-0 text-amber-500" /> 
+                           <span className="truncate font-medium">{doc}</span> 
+                           <span className="text-[10px] bg-secondary border border-border/50 px-1.5 py-0.5 rounded ml-auto flex-shrink-0">Local</span>
+                         </div>
+                      ))}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic bg-secondary/10 p-3 rounded-lg border border-dashed border-border/50 text-center">No context documents provided.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Diagrams and Repo Link */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4" /> Architecture Inputs
+                </h4>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center bg-secondary/30 px-4 py-3 rounded-xl border border-border/50 text-sm">
+                    <span className="font-medium text-muted-foreground">Diagrams Uploaded</span>
+                    <span className="font-bold bg-background border border-border/50 px-2 py-0.5 rounded-md">{model.assessmentMeta.diagramsCount}</span>
+                  </div>
+                  <div className="flex flex-col gap-1.5 bg-secondary/30 px-4 py-3 rounded-xl border border-border/50 text-sm">
+                    <span className="font-medium text-muted-foreground">Repository Attached</span>
+                    <span className="text-xs font-mono font-medium truncate text-foreground bg-background border border-border/50 px-2 py-1 rounded-md">
+                      {model.assessmentMeta.repositoryUrl || 'None'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Scanned Repo Files */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                  <FolderGit2 className="h-4 w-4" /> Repository Analysis
+                </h4>
+                {model.assessmentMeta.scannedFiles && model.assessmentMeta.scannedFiles.length > 0 ? (
+                  <div className="border border-border/50 rounded-xl overflow-hidden shadow-sm">
+                    <div className="bg-secondary/50 px-4 py-2.5 text-xs font-bold text-muted-foreground border-b border-border/50 flex justify-between">
+                      <span>Priority Files Analyzed ({model.assessmentMeta.scannedFiles.length})</span>
+                      <span>Size</span>
+                    </div>
+                    <div className="max-h-40 overflow-y-auto bg-card">
+                      {model.assessmentMeta.scannedFiles.map((f, i) => (
+                        <div key={i} className="flex justify-between items-center px-4 py-2 border-b border-border/50 last:border-0 text-xs hover:bg-secondary/20 transition-colors">
+                          <span className="truncate font-mono mr-2 text-foreground font-medium" title={f.path}>{f.path.split('/').pop()}</span>
+                          <span className="text-muted-foreground whitespace-nowrap bg-secondary px-1.5 py-0.5 rounded border border-border/50">{formatBytes(f.size)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic bg-secondary/10 p-3 rounded-lg border border-dashed border-border/50 text-center">No repository files were scanned.</p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

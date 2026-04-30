@@ -17,6 +17,8 @@ export interface AnalysisPayload {
     title: string;
     content: string;
   };
+  diagramsCount?: number;
+  localDocuments?: string[];
 }
 
 export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress: (step: number) => void) => {
@@ -49,12 +51,14 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     onProgress(1);
     let finalInput = sanitisedInput;
     let repoThreats: Threat[] = [];
+    let repoScannedFiles: { path: string, size: number }[] = [];
     
     if (payload.repositoryUrl) {
       try {
         const repoAnalysis = await agentRepositoryAnalysis(payload.repositoryUrl, sanitisedInput);
         finalInput += `\n\nRepository Inferred Purpose:\n${repoAnalysis.inferredPurpose}`;
         repoThreats = repoAnalysis.inherentVulnerabilities || [];
+        repoScannedFiles = repoAnalysis.scannedFiles || [];
       } catch (e) {
         console.warn("Repository analysis failed, skipping repo specific threats.", e);
       }
@@ -123,7 +127,14 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
       srg,
       threats: allThreats,
       complianceGaps,
-      framework
+      framework,
+      assessmentMeta: {
+        diagramsCount: payload.diagramsCount || 0,
+        repositoryUrl: payload.repositoryUrl,
+        localDocuments: payload.localDocuments || [],
+        globalDocuments: globalDocs.map(d => d.name),
+        scannedFiles: repoScannedFiles
+      }
     });
 
     return { success: true, modelId: newModelId };
