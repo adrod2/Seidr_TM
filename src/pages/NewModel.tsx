@@ -11,7 +11,6 @@ import {
   X,
   FileImage,
   Paperclip,
-  Shield,
   AlertTriangle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -42,7 +41,6 @@ export const NewModel = () => {
   const [activeTab, setActiveTab] = useState('text');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
-  const [selectedFramework, setSelectedFramework] = useState('STRIDE');
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
@@ -168,7 +166,7 @@ export const NewModel = () => {
       {
         name: modelName,
         description: payloadDesc,
-        frameworks: [selectedFramework],
+        frameworks: ['Hybrid TM'],
         repositoryUrl: repoUrl,
         diagramsCount: uploadedDiagrams.length,
         localDocuments: uploadedDocs.map(d => d.name)
@@ -203,7 +201,7 @@ export const NewModel = () => {
         
         <h2 className="text-2xl font-bold mb-2">Analyzing System Architecture</h2>
         <p className="text-muted-foreground text-center mb-10">
-          Seidr AI is building your threat model using {selectedFramework}. Security gates and agents are running.
+          Seidr AI is building your threat model using the Hybrid Methodology. Security gates and agents are running.
         </p>
 
         <div className="w-full space-y-4">
@@ -266,18 +264,6 @@ export const NewModel = () => {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="relative flex items-center">
-             <Shield className="absolute left-3 h-4 w-4 text-muted-foreground pointer-events-none" />
-             <select
-               value={selectedFramework}
-               onChange={(e) => setSelectedFramework(e.target.value)}
-               className="bg-secondary/50 border border-border/50 rounded-full pl-9 pr-8 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none cursor-pointer hover:bg-secondary/80 transition-colors shadow-sm"
-             >
-               <option value="STRIDE">STRIDE</option>
-               <option value="PASTA">PASTA</option>
-               <option value="MAESTRO">MAESTRO</option>
-             </select>
-          </div>
           <button 
             onClick={handleAnalyze}
             className="bg-primary text-primary-foreground px-6 py-2.5 rounded-full font-medium flex items-center gap-2 hover:bg-primary/90 transition-all shadow-md hover:shadow-lg"

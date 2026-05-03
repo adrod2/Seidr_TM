@@ -53,14 +53,6 @@ export const Report = () => {
     );
   }
 
-  const getRiskLevel = (score: number) => {
-    if (score >= 80) return { label: 'Critical', color: 'text-destructive bg-destructive/10 border-destructive/20' };
-    if (score >= 60) return { label: 'High', color: 'text-orange-500 bg-orange-500/10 border-orange-500/20' };
-    if (score >= 40) return { label: 'Medium', color: 'text-amber-500 bg-amber-500/10 border-amber-500/20' };
-    return { label: 'Low', color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' };
-  };
-
-  const riskBadge = getRiskLevel(modelData.riskScore);
   const formattedDate = new Date(modelData.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
   const exportFormats = [
@@ -185,9 +177,6 @@ export const Report = () => {
           <div>
             <div className="flex items-center gap-3 mb-1">
               <h2 className="text-2xl font-bold">{modelData.name}</h2>
-              <span className={`${riskBadge.color} text-xs font-bold px-2.5 py-1 rounded-full border`}>
-                Risk: {riskBadge.label} ({modelData.riskScore})
-              </span>
             </div>
             <p className="text-muted-foreground text-sm flex items-center gap-2">
               Model ID: <span className="font-mono text-xs bg-secondary/50 px-1.5 py-0.5 rounded border border-border/50">{modelData.id}</span>
