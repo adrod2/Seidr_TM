@@ -1,5 +1,5 @@
 import { hashInput, getCachedResult, setCachedResult } from './agentCache';
-import { SystemRepresentationGraph, Threat, ComplianceGap } from './types';
+import { SystemRepresentationGraph, Threat } from './types';
 import { callLLM, callVisionLLM } from './llmClient';
 import { parseGitHubUrl, scanGitHubRepository } from './githubScanner';
 
@@ -229,32 +229,6 @@ ${searchContext}
 };
 
 /**
- * Compliance Agent: Maps identified threats to compliance gaps based on provided controls.
- */
-export const agentCompliance = async (threats: Threat[], customControlsContext?: string): Promise<ComplianceGap[]> => {
-  const systemPrompt = `You are a compliance expert. Given these identified threats, map them to missing or partially met security controls.
-${customControlsContext 
-  ? `CRITICAL INSTRUCTION: You MUST ONLY evaluate compliance against the following specific mandatory controls provided in the organizational context:\n\n${customControlsContext}\n\nDo NOT use any other controls outside of this list.` 
-  : `Map them to missing NIST SP 800-53 controls.`}
-
-Return ONLY a valid JSON array of objects with this EXACT structure:
-[
-  { 
-    "controlId": "string (e.g., AC-2)", 
-    "title": "string", 
-    "status": "Gap Identified" | "Partially Met", 
-    "description": "Explain how the specific threat causes this control gap." 
-  }
-]`;
-
-  // Provide the LLM with the threat details to find the gaps
-  const promptData = `Identified Threats:\n${JSON.stringify(threats.map(t => ({ id: t.id, title: t.title, component: t.componentId, description: t.description })), null, 2)}`;
-  
-  const gapsData = await callLLM(systemPrompt, promptData);
-  return gapsData as ComplianceGap[];
-};
-
-/**
  * Translation Agent: Translates the threat report to a target language.
  */
 export const agentTranslateReport = async (modelData: any, targetLanguage: string): Promise<any> => {
@@ -273,12 +247,6 @@ export const agentTranslateReport = async (modelData: any, targetLanguage: strin
       mitigation: t.mitigation,
       severity: t.severity
     })),
-    complianceGaps: modelData.complianceGaps?.map((c: any) => ({
-      controlId: c.controlId,
-      title: c.title,
-      status: c.status,
-      description: c.description
-    })),
     uiStrings: {
       reportTitle: "Threat Model Report",
       systemName: "System Name",
@@ -291,13 +259,7 @@ export const agentTranslateReport = async (modelData: any, targetLanguage: strin
       description: "Description",
       exploitationPath: "Exploitation Path",
       suggestedMitigation: "Suggested Mitigation Action",
-      noMitigation: "No specific mitigation provided.",
-      complianceGaps: "Compliance Gaps (NIST SP 800-53)",
-      noGaps: "No critical compliance gaps identified. All mapped controls are met.",
-      controlId: "Control ID",
-      title: "Title",
-      status: "Status",
-      details: "Details"
+      noMitigation: "No specific mitigation provided."
     }
   };
 
@@ -318,10 +280,6 @@ export const agentTranslateReport = async (modelData: any, targetLanguage: strin
     threats: modelData.threats?.map((t: any) => {
       const trans = result.threats?.find((rt: any) => rt.id === t.id) || {};
       return { ...t, ...trans };
-    }),
-    complianceGaps: modelData.complianceGaps?.map((c: any) => {
-      const trans = result.complianceGaps?.find((rc: any) => rc.controlId === c.controlId) || {};
-      return { ...c, ...trans };
     })
   };
 

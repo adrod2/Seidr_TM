@@ -8,10 +8,8 @@ import {
   ShieldAlert, 
   GitMerge, 
   CheckSquare, 
-  FileCheck, 
-  Download,
-  BookOpen,
-  Info
+  Info,
+  BookOpen
 } from 'lucide-react';
 
 export const Instructions = () => {
@@ -95,7 +93,7 @@ export const Instructions = () => {
               <h4 className="text-lg font-semibold mb-1 text-foreground">Run the Analysis</h4>
               <p className="text-muted-foreground text-sm leading-relaxed">
                 Once all context is provided, select your preferred threat modeling framework (e.g., STRIDE) and click <strong>"Run Analysis"</strong>. 
-                The AI pipeline will ingest the data, build a C4 architecture graph, identify threats, and map compliance gaps.
+                The AI pipeline will ingest the data, build a C4 architecture graph, and identify threats along with mitigation plans.
               </p>
             </div>
           </div>
@@ -109,7 +107,7 @@ export const Instructions = () => {
           Navigating the Threat Report
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="border border-border/50 rounded-2xl p-5 bg-secondary/10">
             <ShieldAlert className="h-8 w-8 text-destructive mb-4" />
             <h4 className="font-bold text-base mb-2">Threat Catalog</h4>
@@ -134,15 +132,6 @@ export const Instructions = () => {
             <p className="text-sm text-muted-foreground leading-relaxed">
               A drag-and-drop board turning threats into actionable tasks. Every threat gets a tailored mitigation strategy. 
               You can move tasks to "In Progress", "Done", or "Exception" (which requires a mandatory business justification).
-            </p>
-          </div>
-
-          <div className="border border-border/50 rounded-2xl p-5 bg-secondary/10">
-            <FileCheck className="h-8 w-8 text-primary mb-4" />
-            <h4 className="font-bold text-base mb-2">Compliance & Business Risk</h4>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Shows how your threats map against required frameworks (like NIST SP 800-53) and highlights which specific 
-              mandatory controls are failing. It also maps gaps against your global Business Risk Register.
             </p>
           </div>
         </div>

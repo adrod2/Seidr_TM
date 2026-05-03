@@ -6,10 +6,6 @@ import { ShieldAlert, CheckCircle2, Server } from 'lucide-react';
 export const PrintReport = ({ modelData }: { modelData: any }) => {
   if (!modelData) return null;
 
-  const nonCompliantGaps = modelData.complianceGaps?.filter(
-    (g: any) => g.status === 'Gap Identified' || g.status === 'Partially Met'
-  ) || [];
-
   // Fallback to English if translation strings are missing
   const t = modelData.uiStrings || {
     reportTitle: "Threat Model Report",
@@ -23,13 +19,7 @@ export const PrintReport = ({ modelData }: { modelData: any }) => {
     description: "Description",
     exploitationPath: "Exploitation Path",
     suggestedMitigation: "Suggested Mitigation Action",
-    noMitigation: "No specific mitigation provided.",
-    complianceGaps: "Compliance Gaps (NIST SP 800-53)",
-    noGaps: "No critical compliance gaps identified. All mapped controls are met.",
-    controlId: "Control ID",
-    title: "Title",
-    status: "Status",
-    details: "Details"
+    noMitigation: "No specific mitigation provided."
   };
 
   return (
@@ -107,42 +97,6 @@ export const PrintReport = ({ modelData }: { modelData: any }) => {
               </div>
             ))}
           </div>
-        )}
-      </div>
-
-      {/* Compliance Section */}
-      <div className="mb-12 break-inside-avoid">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6 border-b border-gray-200 pb-2">{t.complianceGaps}</h2>
-        {nonCompliantGaps.length === 0 ? (
-          <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg flex items-center gap-3">
-            <CheckCircle2 className="h-6 w-6" />
-            <p className="font-medium">{t.noGaps}</p>
-          </div>
-        ) : (
-          <table className="w-full text-sm text-left border-collapse">
-            <thead className="bg-gray-100 text-gray-700">
-              <tr>
-                <th className="px-4 py-3 border border-gray-200 font-semibold w-24">{t.controlId}</th>
-                <th className="px-4 py-3 border border-gray-200 font-semibold w-1/4">{t.title}</th>
-                <th className="px-4 py-3 border border-gray-200 font-semibold w-28">{t.status}</th>
-                <th className="px-4 py-3 border border-gray-200 font-semibold">{t.details}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {nonCompliantGaps.map((gap: any, idx: number) => (
-                <tr key={idx} className="bg-white">
-                  <td className="px-4 py-3 border border-gray-200 font-mono font-bold text-gray-900">{gap.controlId}</td>
-                  <td className="px-4 py-3 border border-gray-200 font-medium text-gray-900">{gap.title}</td>
-                  <td className="px-4 py-3 border border-gray-200">
-                    <span className={`font-bold px-2 py-1 rounded text-xs ${gap.status === 'Gap Identified' || gap.status === 'Brecha identificada' ? 'text-red-700 bg-red-50' : 'text-orange-700 bg-orange-50'}`}>
-                      {gap.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 border border-gray-200 text-gray-700">{gap.description}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         )}
       </div>
       

@@ -1,5 +1,5 @@
 import { runSecurityPipeline } from './securityPipeline';
-import { agentC4Architect, agentThreatModeling, agentCompliance, agentRepositoryAnalysis, agentMitigationStrategist } from './agents';
+import { agentC4Architect, agentThreatModeling, agentRepositoryAnalysis, agentMitigationStrategist } from './agents';
 import { db } from '../db';
 import { Threat } from './types';
 
@@ -97,13 +97,6 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
 
     onProgress(6);
     
-    // Evaluate Compliance
-    const mmappDoc = globalDocs.find(d => d.name.toLowerCase().includes('mmapp controls.csv'));
-    const customControlsContext = mmappDoc?.content || '';
-    const complianceGaps = await agentCompliance(allThreats, customControlsContext);
-
-    onProgress(7);
-    
     const avgScore = allThreats.length > 0 ? allThreats.reduce((acc, t) => acc + t.cvssScore, 0) / allThreats.length : 0;
     
     let riskMultiplier = 1.0;
@@ -125,7 +118,7 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
       status: 'Completed',
       srg,
       threats: allThreats,
-      complianceGaps,
+      complianceGaps: [], // Set to empty to satisfy interface schema
       framework,
       assessmentMeta: {
         diagramsCount: payload.diagramsCount || 0,

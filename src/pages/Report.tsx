@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { ShieldAlert, GitMerge, CheckSquare, FileCheck, Download, Share2, Sparkles, Loader2, X, LayoutDashboard } from 'lucide-react';
+import { ShieldAlert, GitMerge, CheckSquare, Download, Share2, Sparkles, Loader2, X, LayoutDashboard } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
@@ -10,7 +10,6 @@ import { db } from '@/lib/db';
 import { ThreatCatalogTab } from '@/components/report/ThreatCatalogTab';
 import { C4ArchitectureTab } from '@/components/report/C4ArchitectureTab';
 import { MitigationsTab } from '@/components/report/MitigationsTab';
-import { ComplianceTab } from '@/components/report/ComplianceTab';
 import { FindingsTab } from '@/components/report/FindingsTab';
 import { CopilotSidebar } from '@/components/report/CopilotSidebar';
 import { PrintReport } from '@/components/report/PrintReport';
@@ -225,7 +224,6 @@ export const Report = () => {
           <TabButton active={activeTab === 'threats'} onClick={() => setActiveTab('threats')} icon={ShieldAlert} label="Threat Catalog" />
           <TabButton active={activeTab === 'c4'} onClick={() => setActiveTab('c4')} icon={GitMerge} label="C4 Architecture" />
           <TabButton active={activeTab === 'mitigations'} onClick={() => setActiveTab('mitigations')} icon={CheckSquare} label="Mitigation Plan" />
-          <TabButton active={activeTab === 'compliance'} onClick={() => setActiveTab('compliance')} icon={FileCheck} label="Compliance" />
         </div>
 
         <div className="bg-card border border-border/50 rounded-3xl shadow-sm flex-1 mt-4 overflow-hidden flex">
@@ -234,7 +232,6 @@ export const Report = () => {
             {activeTab === 'threats' && <ThreatCatalogTab threats={modelData.threats} framework={modelData.framework} selectedThreatId={selectedThreatId} />}
             {activeTab === 'c4' && <C4ArchitectureTab srg={modelData.srg} modelId={modelData.id} />}
             {activeTab === 'mitigations' && <MitigationsTab threats={modelData.threats} modelId={modelData.id} />}
-            {activeTab === 'compliance' && <ComplianceTab gaps={modelData.complianceGaps} />}
           </div>
 
           <CopilotSidebar 

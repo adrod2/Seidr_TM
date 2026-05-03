@@ -28,7 +28,6 @@ const analysisSteps = [
   "Identifying trust boundaries and components...",
   "Applying threat framework heuristic rules...",
   "Synthesizing tailored mitigations via web search...",
-  "Evaluating compliance against NIST SP 800-53...",
   "Generating final threat model report..."
 ];
 

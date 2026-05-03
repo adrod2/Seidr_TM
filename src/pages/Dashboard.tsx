@@ -4,7 +4,6 @@ import {
   TrendingDown, 
   TrendingUp, 
   AlertTriangle,
-  CheckCircle,
   Clock,
   Loader2
 } from 'lucide-react';
@@ -48,12 +47,11 @@ const StatCard = ({ title, value, change, icon: Icon, trendColor, subtext }: any
 
 export const Dashboard = () => {
   const models = useLiveQuery(() => db.threatModels.toArray());
-  const documents = useLiveQuery(() => db.documents.toArray());
   
   const stats = useMemo(() => {
     if (!models || models.length === 0) {
       return {
-        metrics: { avgScore: 0, modelCount: 0, change: '0 pts', complianceScore: 0, openActions: 0, coverage: 0, mitigatedTotal: 0 },
+        metrics: { avgScore: 0, modelCount: 0, change: '0 pts', openActions: 0, coverage: 0, mitigatedTotal: 0 },
         chartData: [
           { name: 'Jan', score: 0, target: 50 },
           { name: 'Feb', score: 0, target: 50 },
@@ -68,7 +66,6 @@ export const Dashboard = () => {
 
     let totalScore = 0;
     let totalThreats = 0;
-    let totalGaps = 0;
     const categoryCounts: Record<string, { open: number, mitigated: number }> = {};
 
     models.forEach(m => {
@@ -87,13 +84,6 @@ export const Dashboard = () => {
           categoryCounts[cat].open++;
         }
       });
-
-      // Calculate unique compliance gaps
-      const uniqueGaps = new Set((m.complianceGaps || [])
-        .filter((g: any) => g.status === 'Gap Identified' || g.status === 'Partially Met')
-        .map((g: any) => g.controlId));
-      
-      totalGaps += uniqueGaps.size;
     });
 
     const avgScore = Math.round(totalScore / models.length);
@@ -147,24 +137,6 @@ export const Dashboard = () => {
       .sort((a, b) => (b.open + b.mitigated) - (a.open + a.mitigated))
       .slice(0, 8); // Display top 8 categories
 
-    // Calculate Compliance Score
-    let totalMandatory = 50; 
-    if (documents) {
-      const mmappDoc = documents.find(d => d.name.toLowerCase().includes('mmapp controls.csv'));
-      if (mmappDoc && mmappDoc.content) {
-        const rows = mmappDoc.content.split(/\r?\n/).filter(line => line.trim().length > 0);
-        if (rows.length > 1) {
-          totalMandatory = rows.length - 1;
-        } else if (rows.length === 1) {
-          totalMandatory = 1;
-        }
-      }
-    }
-    
-    const avgGaps = models.length > 0 ? totalGaps / models.length : 0;
-    const metControls = Math.max(0, totalMandatory - avgGaps);
-    const complianceScore = totalMandatory > 0 ? Math.round((metControls / totalMandatory) * 100) : 0;
-
     const mitigatedTotal = Object.values(categoryCounts).reduce((acc, c) => acc + c.mitigated, 0);
     const coverage = totalThreats > 0 ? Math.round((mitigatedTotal / totalThreats) * 100) : 0;
     const openActions = totalThreats - mitigatedTotal;
@@ -174,7 +146,6 @@ export const Dashboard = () => {
         avgScore, 
         modelCount: models.length, 
         change,
-        complianceScore,
         openActions,
         coverage,
         mitigatedTotal
@@ -183,7 +154,7 @@ export const Dashboard = () => {
       totalThreats, 
       frameworkData 
     };
-  }, [models, documents]);
+  }, [models]);
 
   if (models === undefined) {
     return (
@@ -198,7 +169,7 @@ export const Dashboard = () => {
 
   return (
     <div className="space-y-8 pb-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-6">
         <StatCard
           title="Overall Risk Posture"
           value={metrics.avgScore.toString()}
@@ -213,13 +184,6 @@ export const Dashboard = () => {
           trendColor="good"
           icon={ShieldCheck}
           subtext={`${metrics.mitigatedTotal} / ${totalThreats} Total Threats`}
-        />
-        <StatCard
-          title="Compliance Score"
-          value={`${metrics.complianceScore}%`}
-          trendColor={metrics.complianceScore >= 80 ? 'good' : 'bad'}
-          icon={CheckCircle}
-          subtext="Mandatory controls met"
         />
         <StatCard
           title="Open Action Items"
