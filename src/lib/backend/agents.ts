@@ -2,6 +2,7 @@ import { hashInput, getCachedResult, setCachedResult } from './agentCache';
 import { SystemRepresentationGraph, Threat } from './types';
 import { callLLM, callVisionLLM } from './llmClient';
 import { parseGitHubUrl, scanGitHubRepository } from './githubScanner';
+import hybridMethodText from './hybrid-method.md?raw';
 
 /**
  * Diagram Analysis Agent: Uses Vision LLMs to extract dense textual architecture details from an image.
@@ -35,6 +36,8 @@ Given the comprehensive system context, extract MAXIMUM details to build Level 1
 - Level 1 (L1): External users (Person), external systems, and the main system itself.
 - Level 2 (L2): Break down the main system into internal containers (Web App, API Gateway, Microservices, Databases).
 - Level 3 (L3): Break down the containers into specific components (Controllers, Services, Repositories, Security Modules).
+
+You must also meticulously identify and extract any domain boundaries, trust boundaries, or network zones described or implied in the context (e.g., "Internet", "VPC", "DMZ", "Internal Corporate Network").
 
 CRITICAL INSTRUCTION FOR COMPONENT IDs:
 The "id" field MUST be a highly descriptive, readable identifier (e.g., "API-GW", "AUTH-DB", "WEB-CLIENT"). Do not use generic IDs like "c1" or "c2". These IDs must perfectly match the identifiers used in threat modeling later.
@@ -88,7 +91,7 @@ export const agentRepositoryAnalysis = async (repositoryUrl: string, context: st
   const systemPrompt = `You are an expert static application security testing (SAST), Software Composition Analysis (SCA), and repository analysis agent.
 Given the provided system context, repository metadata, file tree, and selected critical file contents, perform a deep architectural and security analysis.
 Infer the repository's precise purpose, architecture, and technology stack based on the actual files and manifests provided.
-Identify 1-3 inherent code-level vulnerabilities, misconfigurations, or supply-chain risks present in this codebase.
+Identify 1 to 10 inherent code-level vulnerabilities, misconfigurations, or supply-chain risks present in this codebase.
 
 CRITICAL INSTRUCTIONS:
 - Base your findings ON THE ACTUAL DATA provided (dependencies in package.json, exposed ports in Dockerfile, specific routing files, etc.).
@@ -129,8 +132,14 @@ export const agentThreatModeling = async (srg: SystemRepresentationGraph, framew
   if (cached) return cached;
 
   const systemPrompt = `You are an expert threat modeler using the ${framework} framework. 
+You must strictly follow the professional hybrid method described below to ensure consistency and high-quality results.
+
+--- HYBRID THREAT MODELING METHODOLOGY ---
+${hybridMethodText}
+------------------------------------------
+
 Analyze the provided System Representation Graph (SRG) ALONG WITH the broader System Context (which includes textual descriptions, documents, diagrams, and repository analysis). 
-Identify potential threats in deep detail by correlating the architecture with the provided context.
+Identify potential threats in deep detail by correlating the architecture with the provided context and the ${framework} framework.
 
 Return ONLY a valid JSON array of objects with this EXACT structure:
 [
