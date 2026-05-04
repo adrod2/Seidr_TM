@@ -1,51 +1,27 @@
-import React, { useState, useRef } from 'react';
-import { 
-  FileText, 
-  Image as ImageIcon, 
-  Github, 
-  Upload,
-  Play,
-  CheckCircle2,
-  Loader2,
-  Sparkles,
-  X,
-  FileImage,
-  Paperclip,
-  AlertTriangle
-} from 'lucide-react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { FileText, Image as ImageIcon, Github, Play } from 'lucide-react';
 import { toast } from 'sonner';
 import { startAnalysisPipeline } from '@/lib/backend/orchestrator';
 import { agentAnalyzeDiagram } from '@/lib/backend/agents';
 import { TabButton } from '@/components/TabButton';
 
-const analysisSteps = [
-  "Ingesting system context and user inputs...",
-  "Analyzing repository code and dependencies...",
-  "Parsing architecture diagrams and data flows...",
-  "Identifying trust boundaries and components...",
-  "Applying threat framework heuristic rules...",
-  "Synthesizing tailored mitigations via web search...",
-  "Generating final threat model report..."
-];
-
-interface UploadedDiagram {
-  file: File;
-  description?: string;
-  isAnalyzing: boolean;
-  error?: string;
-}
+// Imported Refactored Components directly from src/components/
+import { UploadedDiagram } from '@/components/NewModelTypes';
+import { AnalysisProgress } from '@/components/AnalysisProgress';
+import { TextContextTab } from '@/components/TextContextTab';
+import { DiagramsTab } from '@/components/DiagramsTab';
+import { RepositoryTab } from '@/components/RepositoryTab';
 
 export const NewModel = () => {
+  const navigate = useNavigate();
+  
+  // UI State
   const [activeTab, setActiveTab] = useState('text');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
-  const navigate = useNavigate();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const docInputRef = useRef<HTMLInputElement>(null);
 
-  // --- Form State ---
+  // Form State
   const [modelName, setModelName] = useState('');
   const [showNameError, setShowNameError] = useState(false);
   const [description, setDescription] = useState('');
@@ -53,63 +29,54 @@ export const NewModel = () => {
   const [uploadedDiagrams, setUploadedDiagrams] = useState<UploadedDiagram[]>([]);
   const [uploadedDocs, setUploadedDocs] = useState<File[]>([]);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const newFiles = Array.from(e.target.files);
-      
-      const newDiagrams: UploadedDiagram[] = newFiles.map(f => ({ file: f, isAnalyzing: true }));
-      setUploadedDiagrams(prev => [...prev, ...newDiagrams]);
-      
-      for (const newDiag of newDiagrams) {
-        try {
-          const base64DataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (event) => resolve(event.target?.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(newDiag.file);
-          });
-          
-          const desc = await agentAnalyzeDiagram(base64DataUrl);
-          
-          setUploadedDiagrams(prev => prev.map(d => 
-            d.file === newDiag.file ? { ...d, description: desc, isAnalyzing: false } : d
-          ));
-          toast.success(`Vision Analysis complete for ${newDiag.file.name}`);
-        } catch (error: any) {
-          setUploadedDiagrams(prev => prev.map(d => 
-            d.file === newDiag.file ? { ...d, isAnalyzing: false, error: error.message } : d
-          ));
-          toast.error(`Failed to analyze ${newDiag.file.name}`);
-        }
+  const handleAddDocs = (files: File[]) => {
+    setUploadedDocs(prev => [...prev, ...files]);
+    toast.success(`${files.length} document(s) added to context.`);
+  };
+
+  const handleRemoveDoc = (index: number) => {
+    setUploadedDocs(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddDiagrams = async (files: File[]) => {
+    const newDiagrams: UploadedDiagram[] = files.map(f => ({ file: f, isAnalyzing: true }));
+    setUploadedDiagrams(prev => [...prev, ...newDiagrams]);
+    
+    for (const newDiag of newDiagrams) {
+      try {
+        const base64DataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (event) => resolve(event.target?.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(newDiag.file);
+        });
+        
+        const desc = await agentAnalyzeDiagram(base64DataUrl);
+        
+        setUploadedDiagrams(prev => prev.map(d => 
+          d.file === newDiag.file ? { ...d, description: desc, isAnalyzing: false } : d
+        ));
+        toast.success(`Vision Analysis complete for ${newDiag.file.name}`);
+      } catch (error: any) {
+        setUploadedDiagrams(prev => prev.map(d => 
+          d.file === newDiag.file ? { ...d, isAnalyzing: false, error: error.message } : d
+        ));
+        toast.error(`Failed to analyze ${newDiag.file.name}`);
       }
     }
   };
 
-  const handleDocUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const newFiles = Array.from(e.target.files);
-      setUploadedDocs(prev => [...prev, ...newFiles]);
-      toast.success(`${newFiles.length} document(s) added to context.`);
-    }
-  };
-
-  const removeDiagram = (index: number) => {
+  const handleRemoveDiagram = (index: number) => {
     setUploadedDiagrams(prev => prev.filter((_, i) => i !== index));
   };
 
-  const removeDoc = (index: number) => {
-    setUploadedDocs(prev => prev.filter((_, i) => i !== index));
-  };
-
   const handleAnalyze = async () => {
-    // Validate System Name
     if (!modelName.trim()) {
       setShowNameError(true);
       toast.error('System Name is mandatory. Please provide a name before running the analysis.');
       return;
     }
     
-    // Check if diagrams are still processing
     if (uploadedDiagrams.some(d => d.isAnalyzing)) {
       toast.error('Please wait for diagram analysis to finish before starting the pipeline.');
       return;
@@ -124,7 +91,6 @@ export const NewModel = () => {
       payloadDesc = "Standard web application running on AWS with React frontend and Node backend using a PostgreSQL database.";
     }
     
-    // Extract actual text content from locally attached context documents
     if (uploadedDocs.length > 0) {
       let localDocsText = "";
       for (const file of uploadedDocs) {
@@ -150,7 +116,6 @@ export const NewModel = () => {
       }
     }
 
-    // Inject AI diagram descriptions into the context
     if (uploadedDiagrams.length > 0) {
       const diagramContext = uploadedDiagrams
         .filter(d => d.description)
@@ -186,61 +151,7 @@ export const NewModel = () => {
   };
 
   if (isAnalyzing) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[calc(100vh-12rem)] max-w-lg mx-auto">
-        <motion.div 
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="relative mb-8"
-        >
-          <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full"></div>
-          <div className="bg-primary text-primary-foreground p-5 rounded-3xl relative shadow-xl">
-            <Sparkles className="h-10 w-10 animate-pulse" />
-          </div>
-        </motion.div>
-        
-        <h2 className="text-2xl font-bold mb-2">Analyzing System Architecture</h2>
-        <p className="text-muted-foreground text-center mb-10">
-          Seidr AI is building your threat model using the Hybrid Methodology. Security gates and agents are running.
-        </p>
-
-        <div className="w-full space-y-4">
-          {analysisSteps.map((step, index) => {
-            const isCompleted = index < currentStep;
-            const isCurrent = index === currentStep;
-            const isPending = index > currentStep;
-
-            return (
-              <motion.div 
-                key={step}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ 
-                  opacity: isPending ? 0.4 : 1, 
-                  x: 0,
-                  scale: isCurrent ? 1.02 : 1
-                }}
-                className={`flex items-center gap-4 p-4 rounded-2xl border transition-colors ${
-                  isCurrent ? 'bg-card border-primary shadow-sm' : 'border-transparent'
-                }`}
-              >
-                <div className="flex-shrink-0">
-                  {isCompleted ? (
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                  ) : isCurrent ? (
-                    <Loader2 className="h-5 w-5 text-primary animate-spin" />
-                  ) : (
-                    <div className="h-5 w-5 rounded-full border-2 border-border" />
-                  )}
-                </div>
-                <span className={`text-sm font-medium ${isCurrent ? 'text-primary' : isPending ? 'text-muted-foreground' : 'text-foreground'}`}>
-                  {step}
-                </span>
-              </motion.div>
-            );
-          })}
-        </div>
-      </div>
-    );
+    return <AnalysisProgress currentStep={currentStep} />;
   }
 
   return (
@@ -282,154 +193,28 @@ export const NewModel = () => {
 
       <div className="bg-card border border-border/50 rounded-3xl shadow-sm flex-1 mt-4 p-6 overflow-y-auto">
         {activeTab === 'text' && (
-          <div className="h-full flex flex-col gap-6">
-            <div className="flex-1 flex flex-col">
-              <h3 className="text-lg font-semibold mb-2">Textual System Description</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Describe your system architecture, data flows, trust boundaries, and primary use cases in natural language.
-              </p>
-              <textarea 
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="flex-1 min-h-[200px] bg-secondary/30 border border-border/50 rounded-2xl p-4 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none w-full shadow-inner"
-                placeholder="e.g. The system is a multi-tenant SaaS application running on AWS. It uses a React frontend, a Node.js API backend, and a PostgreSQL database. Authentication is handled via Auth0..."
-              ></textarea>
-              <p className="text-xs text-muted-foreground mt-4">
-                * Note: The 3-gate security pipeline is active. Try pasting an email address to see PII redaction in action, or type "ignore previous instructions" to trigger the prompt injection shield!
-              </p>
-            </div>
-
-            <div className="border-t border-border/50 pt-6">
-              <div className="flex items-center justify-between mb-4">
-                 <div>
-                   <h3 className="text-sm font-semibold">Supporting Documents</h3>
-                   <p className="text-xs text-muted-foreground">Upload policies, architectural decision records, or logs.</p>
-                 </div>
-                 <button 
-                   onClick={() => docInputRef.current?.click()}
-                   className="text-sm bg-secondary text-foreground border border-border/50 px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-secondary/80 transition-colors shadow-sm"
-                 >
-                   <Paperclip className="h-4 w-4" /> Attach Files
-                 </button>
-                 <input 
-                   type="file" 
-                   ref={docInputRef} 
-                   onChange={handleDocUpload} 
-                   multiple 
-                   accept=".doc,.docx,.pdf,.xls,.xlsx,.csv,.txt,.md"
-                   className="hidden" 
-                 />
-              </div>
-              
-              {uploadedDocs.length > 0 ? (
-                <div className="flex flex-wrap gap-3">
-                  {uploadedDocs.map((file, idx) => (
-                    <div key={idx} className="flex items-center gap-2 bg-background border border-border/50 px-3 py-2 rounded-xl text-sm shadow-sm">
-                      <FileText className="h-4 w-4 text-primary" />
-                      <span className="max-w-[150px] truncate font-medium">{file.name}</span>
-                      <span className="text-[10px] text-muted-foreground mr-1">{(file.size / 1024).toFixed(0)}kb</span>
-                      <button onClick={() => removeDoc(idx)} className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 p-1 rounded-md transition-colors ml-1">
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center p-6 border border-dashed border-border/50 rounded-2xl bg-secondary/10">
-                  <p className="text-sm text-muted-foreground">No documents attached. Supported formats: .pdf, .docx, .txt, .csv, .md</p>
-                </div>
-              )}
-            </div>
-          </div>
+          <TextContextTab 
+            description={description} 
+            setDescription={setDescription} 
+            uploadedDocs={uploadedDocs} 
+            onAddDocs={handleAddDocs} 
+            onRemoveDoc={handleRemoveDoc} 
+          />
         )}
-
+        
         {activeTab === 'diagrams' && (
-          <div className="h-full flex flex-col">
-            <h3 className="text-lg font-semibold mb-4">Architecture Diagrams</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full pb-6">
-              <div 
-                onClick={() => fileInputRef.current?.click()}
-                className="bg-secondary/30 border-2 border-dashed border-border rounded-3xl p-12 flex flex-col items-center justify-center hover:bg-secondary/50 transition-colors cursor-pointer"
-              >
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleFileUpload} 
-                  multiple 
-                  accept="image/png, image/jpeg, image/webp"
-                  className="hidden" 
-                />
-                <Upload className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-1">Upload Diagrams</h3>
-                <p className="text-sm text-muted-foreground mb-4 text-center">Drag and drop architecture diagrams, or click to browse</p>
-                <p className="text-xs text-muted-foreground text-center">Supported: PNG, JPG, WEBP</p>
-              </div>
-
-              <div className="bg-secondary/10 border border-border/50 rounded-3xl p-6 overflow-y-auto">
-                <h4 className="font-bold text-sm mb-4">Attached Context ({uploadedDiagrams.length})</h4>
-                {uploadedDiagrams.length === 0 ? (
-                  <div className="flex items-center justify-center h-40 text-sm text-muted-foreground border border-dashed border-border/50 rounded-2xl">
-                    No diagrams uploaded yet
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {uploadedDiagrams.map((diag, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 bg-card border border-border/50 rounded-xl">
-                        <div className="flex items-center gap-3 truncate">
-                          {diag.isAnalyzing ? (
-                            <Loader2 className="h-5 w-5 text-primary flex-shrink-0 animate-spin" />
-                          ) : diag.error ? (
-                            <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0" />
-                          ) : (
-                            <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
-                          )}
-                          <div className="truncate">
-                            <p className="text-sm font-medium truncate">{diag.file.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {diag.isAnalyzing ? 'Extracting architecture details via Vision...' : diag.error ? 'Analysis failed' : 'Architecture extracted successfully'}
-                            </p>
-                          </div>
-                        </div>
-                        <button 
-                          onClick={() => removeDiagram(idx)}
-                          className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          <DiagramsTab 
+            uploadedDiagrams={uploadedDiagrams} 
+            onAddDiagrams={handleAddDiagrams} 
+            onRemoveDiagram={handleRemoveDiagram} 
+          />
         )}
 
         {activeTab === 'git' && (
-          <div className="max-w-2xl">
-            <h3 className="text-lg font-semibold mb-4">Connect Code Repositories</h3>
-            <p className="text-sm text-muted-foreground mb-6">
-              Connect a GitHub, GitLab, or Bitbucket repository. The AI agent will perform a heuristic scan of configuration, dependencies, and code structure.
-            </p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Repository URL</label>
-                <input 
-                  type="text" 
-                  value={repoUrl}
-                  onChange={(e) => setRepoUrl(e.target.value)}
-                  className="w-full bg-secondary/30 border border-border/50 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary/50" 
-                  placeholder="https://github.com/org/repo" 
-                />
-              </div>
-              <button 
-                onClick={() => toast.promise(new Promise(r => setTimeout(r, 1500)), { loading: 'Verifying connection...', success: 'Repository connected and ready for scan!' })}
-                className="bg-secondary text-secondary-foreground px-4 py-2 rounded-xl font-medium text-sm mt-2 hover:bg-secondary/80 transition-colors shadow-sm"
-              >
-                Verify Connection
-              </button>
-            </div>
-          </div>
+          <RepositoryTab 
+            repoUrl={repoUrl} 
+            setRepoUrl={setRepoUrl} 
+          />
         )}
       </div>
     </div>
