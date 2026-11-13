@@ -1,7 +1,8 @@
 "use client";
 
 import React from 'react';
-import { ShieldAlert, CheckCircle2, Server } from 'lucide-react';
+import { CheckCircle2, Server } from 'lucide-react';
+import { SeidrLogo } from '../SeidrLogo';
 
 export const PrintReport = ({ modelData }: { modelData: any }) => {
   if (!modelData) return null;
@@ -37,7 +38,7 @@ export const PrintReport = ({ modelData }: { modelData: any }) => {
       {/* Header */}
       <div className="border-b-2 border-gray-200 pb-6 mb-8">
         <div className="flex items-center gap-3 mb-4">
-          <ShieldAlert className="h-10 w-10 text-blue-600" />
+          <SeidrLogo className="h-10 w-10" />
           <h1 className="text-3xl font-bold text-gray-900">{t.reportTitle}</h1>
         </div>
         <div className="grid grid-cols-2 gap-4 text-sm">

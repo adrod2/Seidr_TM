@@ -17,6 +17,16 @@ export interface ThreatModel {
     localDocuments: string[];
     globalDocuments: string[];
     scannedFiles?: { path: string; size: number }[];
+    descriptionSummary?: string;
+    descriptionHighlights?: string[];
+    descriptionSource?: 'user' | 'derived' | 'default';
+    sourceUrl?: string;
+    crawledPages?: { url: string; title: string }[];
+    webIntelligence?: string;
+    webIntelligenceError?: string;
+    /** Per-input record of what was read and how much of it reached the threat-modeling context. */
+    inputs?: import('./backend/analysisContext').InputStatus[];
+    contextChars?: number;
   };
 }
 
@@ -25,6 +35,7 @@ export interface AiConfig {
   provider: string;
   apiKey: string;
   endpoint: string;
+  copilotModel?: string;
 }
 
 export interface BusinessRisk {
@@ -41,6 +52,7 @@ export interface Document {
   name: string;
   chunks: number;
   content?: string;
+  extraction?: { method: string; status: string; pages?: number; note?: string };
 }
 
 export interface User {
@@ -76,10 +88,21 @@ db.version(1).stores({
   integrations: 'id'
 });
 
+db.version(2).stores({}).upgrade(async (transaction) => {
+  const configs = transaction.table<AiConfig>('aiConfig');
+  const config = await configs.get('default');
+  if (!config || (config.provider === 'openai' && !config.apiKey)) {
+    await configs.put({
+      id: 'default', provider: 'copilot', apiKey: '',
+      endpoint: config?.endpoint || 'http://localhost:11434', copilotModel: '',
+    });
+  }
+});
+
 // Seed default config (empty state for clean agentic run)
 db.on('populate', async () => {
   await db.aiConfig.add({
-    id: 'default', provider: 'openai', apiKey: '', endpoint: 'http://localhost:11434'
+    id: 'default', provider: 'copilot', apiKey: '', endpoint: 'http://localhost:11434', copilotModel: ''
   });
   await db.integrations.bulkAdd([
     { id: 'jira', connected: false },

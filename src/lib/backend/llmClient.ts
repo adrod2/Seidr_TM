@@ -1,20 +1,26 @@
-import { db } from '../db';
+import { db, type AiConfig } from '../db';
+import { generateWithCopilot } from './copilotClient';
+import { extractJson } from './llmResponse';
 
-const extractJson = (text: string) => {
-  const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```\n([\s\S]*?)\n```/);
-  const rawJson = jsonMatch ? jsonMatch[1] : text;
-  return JSON.parse(rawJson);
-};
-
-export const callLLM = async (systemPrompt: string, userPrompt: string) => {
-  const config = await db.aiConfig.get('default');
+export const callLLM = async (
+  systemPrompt: string,
+  userPrompt: string,
+  format: 'json' | 'text' = 'json',
+  configOverride?: AiConfig,
+) => {
+  const config = configOverride ?? await db.aiConfig.get('default');
   
   if (!config) throw new Error("AI Configuration is missing.");
-  if (config.provider !== 'ollama' && !config.apiKey) {
+  if (!['copilot', 'ollama'].includes(config.provider) && !config.apiKey) {
     throw new Error(`API Key for ${config.provider} is missing. Please configure it in the Admin tab.`);
   }
 
   try {
+    if (config.provider === 'copilot') {
+      const content = await generateWithCopilot(systemPrompt, userPrompt, format, config.copilotModel);
+      return format === 'json' ? extractJson(content) : content;
+    }
+
     if (config.provider === 'openai') {
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -24,7 +30,7 @@ export const callLLM = async (systemPrompt: string, userPrompt: string) => {
         },
         body: JSON.stringify({
           model: 'gpt-4o-mini',
-          response_format: { type: "json_object" },
+          ...(format === 'json' ? { response_format: { type: "json_object" } } : {}),
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }
@@ -33,7 +39,7 @@ export const callLLM = async (systemPrompt: string, userPrompt: string) => {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error.message);
-      return JSON.parse(data.choices[0].message.content);
+      return format === 'json' ? extractJson(data.choices[0].message.content) : data.choices[0].message.content;
     }
 
     if (config.provider === 'gemini') {
@@ -42,12 +48,13 @@ export const callLLM = async (systemPrompt: string, userPrompt: string) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-          generationConfig: { responseMimeType: "application/json" }
+          ...(format === 'json' ? { generationConfig: { responseMimeType: "application/json" } } : {})
         })
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error.message);
-      return extractJson(data.candidates[0].content.parts[0].text);
+      const content = data.candidates[0].content.parts[0].text;
+      return format === 'json' ? extractJson(content) : content;
     }
 
     if (config.provider === 'claude') {
@@ -68,7 +75,7 @@ export const callLLM = async (systemPrompt: string, userPrompt: string) => {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error.message);
-      return extractJson(data.content[0].text);
+      return format === 'json' ? extractJson(data.content[0].text) : data.content[0].text;
     }
 
     if (config.provider === 'ollama') {
@@ -80,17 +87,18 @@ export const callLLM = async (systemPrompt: string, userPrompt: string) => {
           model: 'qwen3.5',
           system: systemPrompt,
           prompt: userPrompt,
-          format: 'json',
+          ...(format === 'json' ? { format: 'json' } : {}),
           stream: false
         })
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      return extractJson(data.response);
+      return format === 'json' ? extractJson(data.response) : data.response;
     }
-  } catch (error: any) {
+    throw new Error(`Unsupported AI provider: ${config.provider}`);
+  } catch (error: unknown) {
     console.error(`[LLM Error - ${config.provider}]:`, error);
-    throw new Error(`Failed to generate via ${config.provider}. Check your API keys and connection. Error: ${error.message}`);
+    throw new Error(`Failed to generate via ${config.provider}. ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
 
@@ -98,11 +106,15 @@ export const callVisionLLM = async (systemPrompt: string, userPrompt: string, ba
   const config = await db.aiConfig.get('default');
   
   if (!config) throw new Error("AI Configuration is missing.");
-  if (config.provider !== 'ollama' && !config.apiKey) {
+  if (!['copilot', 'ollama'].includes(config.provider) && !config.apiKey) {
     throw new Error(`API Key for ${config.provider} is missing. Please configure it in the Admin tab.`);
   }
 
   try {
+    if (config.provider === 'copilot') {
+      return await generateWithCopilot(systemPrompt, userPrompt, 'text', config.copilotModel, base64DataUrl);
+    }
+
     if (config.provider === 'openai') {
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -177,8 +189,8 @@ export const callVisionLLM = async (systemPrompt: string, userPrompt: string, ba
     }
 
     throw new Error(`Vision analysis is not natively supported for ${config.provider} yet in this configuration.`);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`[Vision LLM Error - ${config.provider}]:`, error);
-    throw new Error(`Failed to process image via ${config.provider}. Error: ${error.message}`);
+    throw new Error(`Failed to process image via ${config.provider}. ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };

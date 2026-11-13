@@ -5,6 +5,8 @@ export interface SRGComponent {
   c4Type?: 'Person' | 'System' | 'Container' | 'Database' | 'Component';
   c4Level?: 'L1' | 'L2' | 'L3' | 'Global';
   description: string;
+  technology?: string;
+  external?: boolean;
   metadata?: Record<string, any>;
 }
 

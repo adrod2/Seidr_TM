@@ -12,7 +12,7 @@ import { ThreatModel } from "@/lib/db";
 import { cn, getSeverityColor } from "@/lib/utils";
 import { useMemo } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from "recharts";
-import { Database, FileText, Globe, Paperclip, Image as ImageIcon, Github, FolderGit2 } from "lucide-react";
+import { Database, FileText, Globe, Paperclip, Image as ImageIcon, Github, FolderGit2, ScrollText, ListChecks } from "lucide-react";
 
 interface FindingsTabProps {
   threats: Threat[];
@@ -33,6 +33,17 @@ export function FindingsTab({
   model,
   onThreatSelect,
 }: FindingsTabProps) {
+  // Older models predate stored summaries: derive an extractive summary from the saved context.
+  const descriptionFallback = useMemo(() => {
+    const raw = model.description || '';
+    const match = /System Description:\s*([\s\S]*?)(?:\n\s*Deployment Model:|$)/.exec(raw);
+    const text = (match ? match[1] : raw).split(/\n\s*Attached Context Documents Content:|\n\s*Architecture Diagram Analyses:/)[0]
+      .replace(/\s+/g, ' ').trim();
+    if (!text || text === 'Not provided') return 'No textual system description was provided for this assessment.';
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+    const summary = sentences.slice(0, 3).join(' ').trim();
+    return summary.length > 600 ? `${summary.slice(0, 597)}...` : summary;
+  }, [model.description]);
   const findingsSummary = useMemo(() => {
     const severities = {
       Critical: 0,
@@ -345,6 +356,78 @@ export function FindingsTab({
             </CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="mb-6 bg-secondary/20 border border-border/50 rounded-2xl p-5">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                  <ScrollText className="h-4 w-4" /> System Description Summary
+                </h4>
+                {model.assessmentMeta.descriptionSource && (
+                  <span className="text-[10px] bg-background border border-border/50 px-2 py-0.5 rounded-md text-muted-foreground">
+                    {model.assessmentMeta.descriptionSource === 'user' ? 'From textual description'
+                      : model.assessmentMeta.descriptionSource === 'default' ? 'Default sample description'
+                      : 'Derived from attached inputs'}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm leading-relaxed text-foreground">
+                {model.assessmentMeta.descriptionSummary || descriptionFallback}
+              </p>
+              {model.assessmentMeta.descriptionHighlights && model.assessmentMeta.descriptionHighlights.length > 0 && (
+                <ul className="mt-3 flex flex-wrap gap-2">
+                  {model.assessmentMeta.descriptionHighlights.map((h, i) => (
+                    <li key={i} className="text-xs bg-background border border-border/50 px-2.5 py-1 rounded-full">{h}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {model.assessmentMeta.inputs && model.assessmentMeta.inputs.length > 0 && (
+              <div className="mb-6 bg-secondary/10 border border-border/50 rounded-2xl p-5">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                    <ListChecks className="h-4 w-4" /> Inputs Analysed
+                  </h4>
+                  {model.assessmentMeta.contextChars !== undefined && (
+                    <span className="text-[10px] bg-background border border-border/50 px-2 py-0.5 rounded-md text-muted-foreground">
+                      {model.assessmentMeta.contextChars.toLocaleString()} characters of context sent to the threat agent
+                    </span>
+                  )}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-muted-foreground border-b border-border/50">
+                        <th className="py-2 pr-3 font-medium">Input</th>
+                        <th className="py-2 pr-3 font-medium">Type</th>
+                        <th className="py-2 pr-3 font-medium">Status</th>
+                        <th className="py-2 pr-3 font-medium text-right">Used / read</th>
+                        <th className="py-2 font-medium">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {model.assessmentMeta.inputs.map((input, i) => {
+                        const tone = input.status === 'included' || input.status === 'digested' ? 'text-emerald-500 border-emerald-500/40 bg-emerald-500/10'
+                          : input.status === 'truncated' ? 'text-amber-500 border-amber-500/40 bg-amber-500/10'
+                          : 'text-destructive border-destructive/40 bg-destructive/10';
+                        return (
+                          <tr key={i} className="border-b border-border/30 last:border-0 align-top">
+                            <td className="py-2 pr-3 font-medium max-w-[260px] truncate" title={input.name}>{input.name}</td>
+                            <td className="py-2 pr-3 text-xs text-muted-foreground whitespace-nowrap">
+                              {{ description: 'Description', diagram: 'Diagram', document: 'Document', website: 'Website', repository: 'Repository', knowledge: 'Knowledge base' }[input.kind]}
+                              {input.method ? ` · ${input.method}` : ''}
+                            </td>
+                            <td className="py-2 pr-3"><span className={`text-[10px] uppercase tracking-wide border px-2 py-0.5 rounded-md ${tone}`}>{input.status}</span></td>
+                            <td className="py-2 pr-3 text-xs text-right font-mono whitespace-nowrap">
+                              {input.chars.toLocaleString()}{input.sourceChars !== undefined ? ` / ${input.sourceChars.toLocaleString()}` : ''}
+                            </td>
+                            <td className="py-2 text-xs text-muted-foreground">{input.note || ''}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Context Documents */}
               <div className="space-y-4">
@@ -390,6 +473,27 @@ export function FindingsTab({
                     <span className="text-xs font-mono font-medium truncate text-foreground bg-background border border-border/50 px-2 py-1 rounded-md">
                       {model.assessmentMeta.repositoryUrl || 'None'}
                     </span>
+                  </div>
+                  <div className="flex flex-col gap-1.5 bg-secondary/30 px-4 py-3 rounded-xl border border-border/50 text-sm">
+                    <span className="font-medium text-muted-foreground">Reference URL Crawled</span>
+                    <span className="text-xs font-mono font-medium truncate text-foreground bg-background border border-border/50 px-2 py-1 rounded-md" title={model.assessmentMeta.sourceUrl}>
+                      {model.assessmentMeta.sourceUrl || 'None'}
+                    </span>
+                    {model.assessmentMeta.crawledPages && model.assessmentMeta.crawledPages.length > 0 && (
+                      <details className="text-xs">
+                        <summary className="cursor-pointer text-primary">{model.assessmentMeta.crawledPages.length} page(s) used</summary>
+                        <ul className="mt-1 space-y-1 max-h-32 overflow-y-auto">
+                          {model.assessmentMeta.crawledPages.map(p => (
+                            <li key={p.url} className="truncate">
+                              <a href={p.url} target="_blank" rel="noopener noreferrer" className="hover:underline" title={p.url}>{p.title || p.url}</a>
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                    {model.assessmentMeta.webIntelligenceError && (
+                      <span className="text-xs text-amber-500">{model.assessmentMeta.webIntelligenceError}</span>
+                    )}
                   </div>
                 </div>
               </div>

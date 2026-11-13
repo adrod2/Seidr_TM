@@ -3,6 +3,10 @@ import { Loader2, UploadCloud, Settings2, FileText, Trash2, CheckCircle2 } from 
 import { toast } from 'sonner';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
+import { SUPPORTED_DOCUMENT_ACCEPT, extractDocument } from '@/lib/backend/documentExtractor';
+import { agentTranscribeImage } from '@/lib/backend/agents';
+
+const needsReupload = (content?: string) => !!content && (/^\s*%PDF-|^\s*PK/.test(content) || /\b(endobj|endstream|FlateDecode)\b/.test(content.slice(0, 5000)));
 
 export const SystemContextTab = () => {
   const [isUploading, setIsUploading] = useState(false);
@@ -19,25 +23,19 @@ export const SystemContextTab = () => {
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        
-        // Extract raw text. (For advanced PDF/DOCX we extract printable ascii strings as a fallback)
-        const text = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = (event) => resolve(event.target?.result as string);
-          reader.onerror = reject;
-          reader.readAsText(file);
-        });
-
-        let cleanText = text;
-        if (file.name.endsWith('.pdf') || file.name.endsWith('.docx')) {
-           cleanText = text.replace(/[^\x20-\x7E\n\r\t]/g, '');
+        const extracted = await extractDocument(file, { ocr: agentTranscribeImage, maxChars: 200_000 });
+        if (extracted.status === 'failed' || extracted.status === 'empty') {
+          toast.error(`${file.name}: ${extracted.note || 'no readable text found'}`);
+          continue;
         }
+        const cleanText = extracted.text;
 
         await db.documents.add({ 
           id: Date.now() + i, 
           name: file.name, 
           chunks: Math.max(1, Math.ceil(cleanText.length / 500)),
-          content: cleanText.substring(0, 50000) // Cap at 50k chars to prevent LLM context bloat
+          content: cleanText,
+          extraction: { method: extracted.method, status: extracted.status, pages: extracted.pages, note: extracted.note },
         });
       }
       toast.success('Document(s) successfully indexed into the database!');
@@ -72,7 +70,7 @@ export const SystemContextTab = () => {
             onChange={handleFileUpload} 
             className="hidden" 
             multiple 
-            accept=".pdf,.docx,.txt,.md,.csv" 
+            accept={SUPPORTED_DOCUMENT_ACCEPT} 
           />
           <button 
             onClick={() => fileInputRef.current?.click()}
@@ -85,7 +83,7 @@ export const SystemContextTab = () => {
               <UploadCloud className="h-8 w-8 text-primary mb-2 group-hover:scale-110 transition-transform" />
             )}
             <span className="text-sm font-medium text-foreground">{isUploading ? 'Processing File...' : 'Upload Document'}</span>
-            <span className="text-xs text-muted-foreground mt-1">PDF, DOCX, TXT, MD, CSV</span>
+            <span className="text-xs text-muted-foreground mt-1">PDF (incl. scanned), DOCX, XLSX, CSV, TXT, MD, JSON/YAML</span>
           </button>
           <div 
             onClick={() => toast.info('Opening URL input dialog')}
@@ -107,7 +105,13 @@ export const SystemContextTab = () => {
                   <FileText className="h-5 w-5 text-primary" />
                   <div>
                     <p className="text-sm font-medium">{doc.name}</p>
-                    <p className="text-xs text-muted-foreground">Indexed • {doc.chunks} chunks</p>
+                    {needsReupload(doc.content) ? (
+                      <p className="text-xs text-destructive">Stored without text extraction (unreadable) • delete and re-upload</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Indexed • {(doc.content?.length || 0).toLocaleString()} chars{doc.extraction?.pages ? ` • ${doc.extraction.pages} pages` : ''}{doc.extraction?.method?.includes('ocr') ? ' • OCR' : ''}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <button 

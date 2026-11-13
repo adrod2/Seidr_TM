@@ -1,4 +1,12 @@
 import { supabase } from '../supabase';
+import { db } from '../db';
+
+const cacheKey = async (agentName: string, inputHash: string) => {
+  const config = await db.aiConfig.get('default');
+  const provider = config?.provider || 'unconfigured';
+  const model = provider === 'copilot' ? config?.copilotModel?.trim() || 'default' : '';
+  return `${provider}_${model}_${agentName}_${inputHash}`;
+};
 
 /**
  * Generates a SHA-256 hash of a given string using the Web Crypto API.
@@ -19,7 +27,7 @@ export const getCachedResult = async <T>(agentName: string, inputHash: string): 
     const { data, error } = await supabase
       .from('agent_result_cache')
       .select('result')
-      .eq('hash_key', `${agentName}_${inputHash}`)
+      .eq('hash_key', await cacheKey(agentName, inputHash))
       .gt('expires_at', new Date().toISOString())
       .single();
 
@@ -40,7 +48,7 @@ export const setCachedResult = async (agentName: string, inputHash: string, resu
     expiresAt.setDate(expiresAt.getDate() + daysToLive);
 
     await supabase.from('agent_result_cache').upsert({
-      hash_key: `${agentName}_${inputHash}`,
+      hash_key: await cacheKey(agentName, inputHash),
       agent_name: agentName,
       result: result,
       expires_at: expiresAt.toISOString(),

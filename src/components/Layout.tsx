@@ -3,7 +3,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
-  ShieldAlert, 
   PlusCircle, 
   List, 
   Settings,
@@ -17,6 +16,7 @@ import {
   Info
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
+import { SeidrLogo } from './SeidrLogo';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 
@@ -31,8 +31,8 @@ const Sidebar = () => {
   return (
     <div className="w-64 bg-card border-r flex flex-col h-full shadow-sm">
       <div className="h-16 flex items-center px-6 border-b border-border/50">
-        <ShieldAlert className="h-8 w-8 text-primary mr-3" />
-        <span className="font-bold text-xl tracking-tight">Seidr</span>
+        <SeidrLogo className="h-9 w-9 mr-3" />
+        <span className="font-semibold text-xl tracking-tight">Seidr</span>
       </div>
       
       <div className="flex-1 py-6 flex flex-col gap-2 px-4">

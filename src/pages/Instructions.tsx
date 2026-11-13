@@ -25,6 +25,11 @@ export const Instructions = () => {
         <p className="text-muted-foreground mt-2">
           A comprehensive guide on how to generate AI-driven threat models and interpret the resulting security reports.
         </p>
+        <p className="text-muted-foreground mt-2 text-sm">
+          To use GitHub Copilot, sign in with <code>copilot login</code> and start <code>pnpm copilot:server</code> in a
+          separate terminal. In <strong>Administration &gt; AI Models</strong>, select <strong>GitHub Copilot</strong>,
+          test the connection, and save. Diagram uploads require a vision-capable model.
+        </p>
       </div>
 
       {/* Part 1: Creating a New Model */}
@@ -56,7 +61,7 @@ export const Instructions = () => {
               <h4 className="text-lg font-semibold mb-1">Add System Description & Documents</h4>
               <p className="text-muted-foreground text-sm leading-relaxed">
                 In the <strong>System Description</strong> tab, provide a natural language explanation of your architecture, data flows, and trust boundaries. 
-                You can also attach text files, PDFs, or Word documents containing security policies or architectural decision records to give the AI more context.
+                You can also attach supporting documents (PDF including scanned PDFs, Word, Excel, CSV, Markdown, JSON/YAML, Terraform, or images). Each file is read when you attach it and shows its pages and character count. Every input is then added to the analysis, and long documents are condensed by a digest agent. The report's Inputs Analysed table confirms how each input was used.
               </p>
             </div>
           </div>
@@ -83,6 +88,10 @@ export const Instructions = () => {
               <p className="text-muted-foreground text-sm leading-relaxed">
                 In the <strong>Repositories</strong> tab, you can paste the URL to your GitHub, GitLab, or Bitbucket repository. 
                 This allows the agent to perform a heuristic scan to identify inherent code-level vulnerabilities, dependencies, and configuration risks.
+              </p>
+              <p className="text-muted-foreground text-sm leading-relaxed mt-2">
+                Optionally add a <strong>Reference URL</strong> (product site, docs, or trust center). A web documentation agent spiders up to
+                25 public pages on that site, keeps the ones relevant to security, privacy, and threat modeling, and adds a cited briefing to the analysis context.
               </p>
             </div>
           </div>
@@ -124,7 +133,9 @@ export const Instructions = () => {
             <h4 className="font-bold text-base mb-2">C4 Architecture Diagram</h4>
             <p className="text-sm text-muted-foreground leading-relaxed">
               An interactive representation of your system's components and data flows. You can toggle between Context (L1), 
-              Container (L2), and Component (L3) views. You can drag nodes, auto-layout, or even edit node descriptions directly.
+              Container (L2), and Component (L3) views drawn with standard C4 notation. <strong>Auto Layout</strong> cycles through six
+              non-overlapping arrangements (layered, tiered, radial, organic, grid), and the <strong>Mermaid</strong> view renders a
+              publication-ready diagram you can export as SVG or PNG. Double-click a node to edit it.
             </p>
           </div>
 

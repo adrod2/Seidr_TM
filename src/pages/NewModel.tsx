@@ -12,17 +12,22 @@ import {
   FileImage,
   Paperclip,
   Shield,
-  AlertTriangle
+  AlertTriangle,
+  Globe,
+  Search,
+  ExternalLink
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { startAnalysisPipeline } from '@/lib/backend/orchestrator';
-import { agentAnalyzeDiagram } from '@/lib/backend/agents';
+import { agentAnalyzeDiagram, agentTranscribeImage, agentWebIntelligence, WebIntelligence } from '@/lib/backend/agents';
+import { ExtractedDocument, SUPPORTED_DOCUMENT_ACCEPT, extractDocument } from '@/lib/backend/documentExtractor';
 import { TabButton } from '@/components/TabButton';
 
 const analysisSteps = [
-  "Ingesting system context and user inputs...",
+  "Reading supporting documents, diagrams and system context...",
+  "Spidering reference URL for security & privacy documentation...",
   "Analyzing repository code and dependencies...",
   "Parsing architecture diagrams and data flows...",
   "Identifying trust boundaries and components...",
@@ -39,6 +44,23 @@ interface UploadedDiagram {
   error?: string;
 }
 
+interface UploadedDoc {
+  file: File;
+  isExtracting: boolean;
+  result?: ExtractedDocument;
+}
+
+const describeExtraction = (doc: UploadedDoc) => {
+  if (doc.isExtracting) return 'Reading…';
+  const r = doc.result;
+  if (!r) return '';
+  if (r.status === 'failed') return r.note || 'Could not read';
+  if (r.status === 'empty') return r.note || 'No text found';
+  const unit = r.method === 'spreadsheet' ? 'sheet' : 'page';
+  return [r.pages ? `${r.pages} ${unit}${r.pages === 1 ? '' : 's'}` : '', `${(r.text.length / 1000).toFixed(r.text.length < 10000 ? 1 : 0)}k chars`,
+    r.method === 'pdf-ocr' || r.method === 'image-ocr' ? 'OCR' : ''].filter(Boolean).join(' · ');
+};
+
 export const NewModel = () => {
   const [activeTab, setActiveTab] = useState('text');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -54,7 +76,11 @@ export const NewModel = () => {
   const [description, setDescription] = useState('');
   const [repoUrl, setRepoUrl] = useState('');
   const [uploadedDiagrams, setUploadedDiagrams] = useState<UploadedDiagram[]>([]);
-  const [uploadedDocs, setUploadedDocs] = useState<File[]>([]);
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [webIntel, setWebIntel] = useState<WebIntelligence | null>(null);
+  const [isCrawling, setIsCrawling] = useState(false);
+  const [crawlError, setCrawlError] = useState('');
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -88,11 +114,19 @@ export const NewModel = () => {
     }
   };
 
-  const handleDocUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const newFiles = Array.from(e.target.files);
-      setUploadedDocs(prev => [...prev, ...newFiles]);
-      toast.success(`${newFiles.length} document(s) added to context.`);
+  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const newFiles = Array.from(e.target.files);
+    e.target.value = '';
+    setUploadedDocs(prev => [...prev, ...newFiles.map(file => ({ file, isExtracting: true }))]);
+    for (const file of newFiles) {
+      const result = await extractDocument(file, { ocr: agentTranscribeImage });
+      setUploadedDocs(prev => prev.map(d => d.file === file ? { ...d, isExtracting: false, result } : d));
+      if (result.status === 'failed' || result.status === 'empty') {
+        toast.error(`${file.name}: ${result.note || 'no readable text found'}`);
+      } else {
+        toast.success(`${file.name}: ${result.text.length.toLocaleString()} characters extracted${result.status === 'partial' ? ' (partial)' : ''}.`);
+      }
     }
   };
 
@@ -102,6 +136,39 @@ export const NewModel = () => {
 
   const removeDoc = (index: number) => {
     setUploadedDocs(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const normalizedSourceUrl = () => {
+    const raw = sourceUrl.trim();
+    if (!raw) return '';
+    const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    try {
+      const url = new URL(withScheme);
+      return ['http:', 'https:'].includes(url.protocol) ? url.href : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleCrawl = async () => {
+    const url = normalizedSourceUrl();
+    if (!url) {
+      toast.error('Enter a valid public http(s) URL to scan.');
+      return;
+    }
+    setIsCrawling(true);
+    setCrawlError('');
+    setWebIntel(null);
+    try {
+      const result = await agentWebIntelligence(url);
+      setWebIntel(result);
+      toast.success(`Documentation agent analysed ${result.pages.length} page(s) from ${new URL(result.sourceUrl).hostname}`);
+    } catch (error: any) {
+      setCrawlError(error.message || 'Crawl failed');
+      toast.error(`URL scan failed: ${error.message}`);
+    } finally {
+      setIsCrawling(false);
+    }
   };
 
   const handleAnalyze = async () => {
@@ -118,52 +185,55 @@ export const NewModel = () => {
       return;
     }
 
+    if (isCrawling) {
+      toast.error('Please wait for the URL documentation scan to finish.');
+      return;
+    }
+
+    if (uploadedDocs.some(d => d.isExtracting)) {
+      toast.error('Please wait for the supporting documents to finish reading.');
+      return;
+    }
+
+    const crawlTarget = normalizedSourceUrl();
+    if (crawlTarget === null) {
+      toast.error('The reference URL is not a valid http(s) URL.');
+      setActiveTab('text');
+      return;
+    }
+
     setShowNameError(false);
     setIsAnalyzing(true);
     setCurrentStep(0);
 
-    let payloadDesc = description;
-    if (!description && uploadedDiagrams.length === 0 && !repoUrl && uploadedDocs.length === 0) {
-      payloadDesc = "Standard web application running on AWS with React frontend and Node backend using a PostgreSQL database.";
-    }
-    
-    // Extract actual text content from locally attached context documents
-    if (uploadedDocs.length > 0) {
-      let localDocsText = "";
-      for (const file of uploadedDocs) {
+    // Give diagrams whose vision analysis failed one more attempt so no input is silently dropped.
+    let diagrams = uploadedDiagrams;
+    const failedDiagrams = uploadedDiagrams.filter(d => !d.description);
+    if (failedDiagrams.length) {
+      diagrams = await Promise.all(uploadedDiagrams.map(async (d) => {
+        if (d.description) return d;
         try {
-          const text = await new Promise<string>((resolve, reject) => {
+          const dataUrl = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
-            reader.onload = (e) => resolve((e.target?.result as string) || '');
+            reader.onload = () => resolve(reader.result as string);
             reader.onerror = reject;
-            reader.readAsText(file);
+            reader.readAsDataURL(d.file);
           });
-          
-          let cleanText = text;
-          if (file.name.endsWith('.pdf') || file.name.endsWith('.docx')) {
-             cleanText = text.replace(/[^\x20-\x7E\n\r\t]/g, '');
-          }
-          localDocsText += `\n\n--- Document: ${file.name} ---\n${cleanText.substring(0, 15000)}`;
-        } catch (e) {
-          console.warn(`Failed to read file ${file.name}`);
+          return { ...d, description: await agentAnalyzeDiagram(dataUrl), error: undefined };
+        } catch (error: any) {
+          return { ...d, error: error?.message || 'Vision analysis failed' };
         }
-      }
-      if (localDocsText) {
-        payloadDesc += `\n\nAttached Context Documents Content:${localDocsText}`;
-      }
+      }));
+      setUploadedDiagrams(diagrams);
+      const stillFailed = diagrams.filter(d => !d.description);
+      if (stillFailed.length) toast.warning(`${stillFailed.length} diagram(s) could not be analysed and are listed as failed in the report.`);
     }
 
-    // Inject AI diagram descriptions into the context
-    if (uploadedDiagrams.length > 0) {
-      const diagramContext = uploadedDiagrams
-        .filter(d => d.description)
-        .map(d => `--- Diagram: ${d.file.name} ---\n${d.description}`)
-        .join('\n\n');
-        
-      if (diagramContext) {
-        payloadDesc += `\n\nArchitecture Diagram Analyses:\n${diagramContext}`;
-      }
-    }
+    const hasOtherInputs = diagrams.some(d => d.description) || !!repoUrl || uploadedDocs.some(d => d.result?.text) || !!crawlTarget;
+    const usedDefaultDescription = !description.trim() && !hasOtherInputs;
+    const payloadDesc = usedDefaultDescription
+      ? "Standard web application running on AWS with React frontend and Node backend using a PostgreSQL database."
+      : description.trim() || 'No textual description was provided; derive the system from the supporting documents, diagrams, website and repository sections.';
 
     const result = await startAnalysisPipeline(
       {
@@ -171,8 +241,14 @@ export const NewModel = () => {
         description: payloadDesc,
         frameworks: [selectedFramework],
         repositoryUrl: repoUrl,
-        diagramsCount: uploadedDiagrams.length,
-        localDocuments: uploadedDocs.map(d => d.name)
+        diagramsCount: diagrams.length,
+        diagrams: diagrams.map(d => ({ name: d.file.name, description: d.description, error: d.error })),
+        localDocuments: uploadedDocs.map(d => d.file.name),
+        documents: uploadedDocs.map(d => d.result || { name: d.file.name, size: d.file.size, method: 'unsupported', status: 'failed', text: '', note: 'Not read.' }),
+        userDescription: description,
+        usedDefaultDescription,
+        sourceUrl: crawlTarget || undefined,
+        webIntelligence: webIntel && crawlTarget && webIntel.sourceUrl.replace(/\/$/, '') === crawlTarget.replace(/\/$/, '') ? webIntel : undefined,
       },
       (stepNumber) => {
         setCurrentStep(stepNumber);
@@ -315,6 +391,72 @@ export const NewModel = () => {
             </div>
 
             <div className="border-t border-border/50 pt-6">
+              <div className="flex items-start justify-between gap-4 mb-3">
+                <div>
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <Globe className="h-4 w-4 text-primary" /> Reference URL <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    A documentation agent spiders this site (same domain, up to 25 pages) and extracts security, privacy, compliance and architecture details into the analysis context.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={sourceUrl}
+                  onChange={(e) => {
+                    setSourceUrl(e.target.value);
+                    setWebIntel(null);
+                    setCrawlError('');
+                  }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleCrawl(); }}
+                  className="flex-1 bg-secondary/30 border border-border/50 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  placeholder="https://docs.example.com or https://example.com/trust"
+                  aria-label="Reference URL"
+                />
+                <button
+                  onClick={handleCrawl}
+                  disabled={isCrawling || !sourceUrl.trim()}
+                  className="text-sm bg-secondary text-foreground border border-border/50 px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-secondary/80 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isCrawling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  {isCrawling ? 'Scanning...' : 'Scan Now'}
+                </button>
+              </div>
+              {isCrawling && (
+                <p className="text-xs text-muted-foreground mt-2">Crawling pages and extracting threat-modeling evidence. This can take up to a minute.</p>
+              )}
+              {crawlError && !isCrawling && (
+                <p className="text-xs text-destructive mt-2 flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5" /> {crawlError}</p>
+              )}
+              {!webIntel && !isCrawling && !crawlError && sourceUrl.trim() && (
+                <p className="text-xs text-muted-foreground mt-2">Not scanned yet; the site will be crawled automatically when you run the analysis.</p>
+              )}
+              {webIntel && (
+                <div className="mt-3 bg-secondary/10 border border-border/50 rounded-2xl p-4">
+                  <div className="flex items-center gap-2 text-sm font-medium mb-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    {webIntel.pages.length} relevant page(s) added to context
+                    {webIntel.skippedPages > 0 && <span className="text-xs text-amber-500">({webIntel.skippedPages} blocked by security gates)</span>}
+                  </div>
+                  <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto mb-3">
+                    {webIntel.pages.map(page => (
+                      <a key={page.url} href={page.url} target="_blank" rel="noopener noreferrer"
+                        className="text-[11px] bg-background border border-border/50 px-2 py-1 rounded-lg flex items-center gap-1 hover:border-primary/50 max-w-[260px]" title={page.url}>
+                        <ExternalLink className="h-3 w-3 flex-shrink-0" /> <span className="truncate">{page.title || page.url}</span>
+                      </a>
+                    ))}
+                  </div>
+                  <details>
+                    <summary className="text-xs text-primary cursor-pointer">Preview extracted briefing</summary>
+                    <pre className="mt-2 text-xs whitespace-pre-wrap max-h-64 overflow-y-auto bg-background border border-border/50 rounded-xl p-3 font-sans">{webIntel.summary}</pre>
+                  </details>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-border/50 pt-6">
               <div className="flex items-center justify-between mb-4">
                  <div>
                    <h3 className="text-sm font-semibold">Supporting Documents</h3>
@@ -331,27 +473,36 @@ export const NewModel = () => {
                    ref={docInputRef} 
                    onChange={handleDocUpload} 
                    multiple 
-                   accept=".doc,.docx,.pdf,.xls,.xlsx,.csv,.txt,.md"
+                   accept={SUPPORTED_DOCUMENT_ACCEPT}
                    className="hidden" 
                  />
               </div>
               
               {uploadedDocs.length > 0 ? (
                 <div className="flex flex-wrap gap-3">
-                  {uploadedDocs.map((file, idx) => (
-                    <div key={idx} className="flex items-center gap-2 bg-background border border-border/50 px-3 py-2 rounded-xl text-sm shadow-sm">
-                      <FileText className="h-4 w-4 text-primary" />
-                      <span className="max-w-[150px] truncate font-medium">{file.name}</span>
-                      <span className="text-[10px] text-muted-foreground mr-1">{(file.size / 1024).toFixed(0)}kb</span>
-                      <button onClick={() => removeDoc(idx)} className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 p-1 rounded-md transition-colors ml-1">
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
+                  {uploadedDocs.map((doc, idx) => {
+                    const failed = doc.result && (doc.result.status === 'failed' || doc.result.status === 'empty');
+                    return (
+                      <div key={idx} title={doc.result?.note || ''} className={`flex items-center gap-2 bg-background border px-3 py-2 rounded-xl text-sm shadow-sm ${failed ? 'border-destructive/50' : 'border-border/50'}`}>
+                        {doc.isExtracting ? <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                          : failed ? <AlertTriangle className="h-4 w-4 text-destructive" />
+                          : <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+                        <div className="flex flex-col min-w-0">
+                          <span className="max-w-[220px] truncate font-medium">{doc.file.name}</span>
+                          <span className={`text-[10px] max-w-[220px] truncate ${failed ? 'text-destructive' : 'text-muted-foreground'}`}>
+                            {(doc.file.size / 1024).toFixed(0)} KB · {describeExtraction(doc)}
+                          </span>
+                        </div>
+                        <button onClick={() => removeDoc(idx)} className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 p-1 rounded-md transition-colors ml-1">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center p-6 border border-dashed border-border/50 rounded-2xl bg-secondary/10">
-                  <p className="text-sm text-muted-foreground">No documents attached. Supported formats: .pdf, .docx, .txt, .csv, .md</p>
+                  <p className="text-sm text-muted-foreground">No documents attached. Supported: PDF (incl. scanned), Word, Excel, CSV, text/Markdown, JSON/YAML/Terraform, and images.</p>
                 </div>
               )}
             </div>

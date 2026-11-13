@@ -3,27 +3,57 @@ import { Key, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
+import { callLLM } from '@/lib/backend/llmClient';
+import { getCopilotModels, type CopilotModel } from '@/lib/backend/copilotClient';
 
 export const AiConfigTab = () => {
-  const configFromDb = useLiveQuery(() => db.aiConfig.get('default'));
-  const [aiConfig, setAiConfig] = useState({ provider: 'openai', apiKey: '', endpoint: 'http://localhost:11434' });
+  const configFromDb = useLiveQuery(async () => (await db.aiConfig.get('default')) ?? null);
+  const [aiConfig, setAiConfig] = useState({
+    provider: 'copilot', apiKey: '', endpoint: 'http://localhost:11434', copilotModel: ''
+  });
+  const [models, setModels] = useState<CopilotModel[]>([]);
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     if (configFromDb) {
       setAiConfig({
         provider: configFromDb.provider,
         apiKey: configFromDb.apiKey,
-        endpoint: configFromDb.endpoint
+        endpoint: configFromDb.endpoint,
+        copilotModel: configFromDb.copilotModel || ''
       });
     }
   }, [configFromDb]);
 
   const saveAiConfig = async () => {
-    await db.aiConfig.put({
-      id: 'default',
-      ...aiConfig
-    });
-    toast.success('AI Agent configuration saved successfully!');
+    try {
+      await db.aiConfig.put({ id: 'default', ...aiConfig, copilotModel: aiConfig.copilotModel.trim() });
+      toast.success('AI Agent configuration saved successfully!');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not save AI configuration.');
+    }
+  };
+
+  const testConnection = async () => {
+    setTesting(true);
+    try {
+      if (aiConfig.provider === 'copilot') {
+        const available = await getCopilotModels();
+        setModels(available);
+        if (!available.length) throw new Error('No Copilot models are available for this account.');
+        if (aiConfig.copilotModel.trim() && !available.some(model => model.id === aiConfig.copilotModel.trim())) {
+          throw new Error('The configured Copilot model is not available for this account.');
+        }
+        toast.success(`Connected to GitHub Copilot. ${available.length} models available.`);
+      } else {
+        await callLLM('You are a connection check. Reply briefly.', 'Reply with OK.', 'text', { id: 'default', ...aiConfig });
+        toast.success(`Successfully connected to ${aiConfig.provider}!`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'AI connection failed.');
+    } finally {
+      setTesting(false);
+    }
   };
 
   if (configFromDb === undefined) return <div className="p-4 flex justify-center"><Loader2 className="animate-spin h-6 w-6 text-primary" /></div>;
@@ -38,8 +68,8 @@ export const AiConfigTab = () => {
       <div className="space-y-6">
         <div>
           <label className="block text-sm font-bold mb-3">Model Provider</label>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {['openai', 'gemini', 'claude', 'ollama'].map(p => (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {['copilot', 'openai', 'gemini', 'claude', 'ollama'].map(p => (
               <button
                 key={p}
                 onClick={() => setAiConfig({...aiConfig, provider: p})}
@@ -49,6 +79,7 @@ export const AiConfigTab = () => {
                     : 'border-border/50 bg-secondary/20 hover:bg-secondary/50 text-muted-foreground'
                 }`}
               >
+                {p === 'copilot' && 'GitHub Copilot'}
                 {p === 'openai' && 'OpenAI (GPT-4)'}
                 {p === 'gemini' && 'Google Gemini'}
                 {p === 'claude' && 'Claude (Anthropic)'}
@@ -59,7 +90,35 @@ export const AiConfigTab = () => {
         </div>
 
         <div className="bg-secondary/30 border border-border/50 rounded-2xl p-6">
-          {aiConfig.provider !== 'ollama' ? (
+          {aiConfig.provider === 'copilot' ? (
+            <div className="space-y-3">
+              <p className="text-sm">
+                Uses your GitHub Copilot account through the local Copilot SDK service. No API key is stored in the browser.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Sign in using <code>copilot login</code>, then run <code>pnpm copilot:server</code> in a separate terminal.
+                Your account must have Copilot access. Organization model policies and usage limits apply.
+              </p>
+              <label htmlFor="copilot-model" className="block text-sm font-bold">Copilot Model (optional)</label>
+              <input
+                id="copilot-model"
+                list="copilot-models"
+                value={aiConfig.copilotModel}
+                onChange={e => setAiConfig({ ...aiConfig, copilotModel: e.target.value })}
+                placeholder="Leave blank to use the Copilot default"
+                className="w-full bg-background border border-border/50 rounded-xl p-3 text-sm"
+              />
+              <datalist id="copilot-models">
+                {models.map(model => (
+                  <option key={model.id} value={model.id}>{model.name}{model.vision ? ' (vision)' : ''}</option>
+                ))}
+              </datalist>
+              <p className="text-xs text-muted-foreground">
+                Test Connection loads available model IDs without generating a response.
+                For diagram uploads, choose a vision-capable model; when blank, the service selects one automatically.
+              </p>
+            </div>
+          ) : aiConfig.provider !== 'ollama' ? (
             <div>
               <label className="flex items-center gap-2 text-sm font-bold mb-2">
                 <Key className="h-4 w-4 text-muted-foreground" />
@@ -104,10 +163,11 @@ export const AiConfigTab = () => {
           Save Configuration
         </button>
         <button 
-          onClick={() => toast.promise(new Promise(r => setTimeout(r, 1500)), { loading: 'Pinging AI provider...', success: `Successfully connected to ${aiConfig.provider}!` })}
+          onClick={testConnection}
+          disabled={testing}
           className="bg-secondary text-foreground px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-secondary/80 transition-all border border-border/50 shadow-sm"
         >
-          Test Connection
+          {testing ? 'Connecting...' : 'Test Connection'}
         </button>
       </div>
     </div>

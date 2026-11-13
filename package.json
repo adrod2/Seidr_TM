@@ -3,14 +3,21 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "dev": "vite",
+    "copilot:server": "node --env-file-if-exists=.env src/server/copilotServer.mjs",
+    "test": "node --test src/server/copilotServer.test.mjs src/server/crawler.test.mjs src/lib/c4Layout.test.mjs src/lib/c4Model.test.mjs src/lib/backend/analysisContext.test.mjs",
+    "test:copilot": "node --test src/server/copilotServer.test.mjs src/server/crawler.test.mjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@github/copilot-sdk": "1.0.26",
     "@hookform/resolvers": "^3.9.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-alert-dialog": "^1.1.1",
@@ -49,11 +56,15 @@
     "date-fns": "^3.6.0",
     "dexie": "^4.4.2",
     "dexie-react-hooks": "^4.4.0",
+    "elkjs": "0.11.0",
     "embla-carousel-react": "^8.3.0",
     "framer-motion": "^12.38.0",
     "input-otp": "^1.2.4",
     "lucide-react": "^0.462.0",
+    "mammoth": "^1.13.0",
+    "mermaid": "^11.17.2",
     "next-themes": "^0.3.0",
+    "pdfjs-dist": "^6.4.299",
     "react": "^19.2.3",
     "react-day-picker": "^9.13.0",
     "react-dom": "^19.2.3",
@@ -65,10 +76,10 @@
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.3",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@dyad-sh/react-vite-component-tagger": "^0.8.0",
     "@eslint/js": "^9.9.0",
     "@tailwindcss/typography": "^0.5.15",
     "@types/node": "^22.5.5",
