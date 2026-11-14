@@ -5,8 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { SUPPORTED_DOCUMENT_ACCEPT, extractDocument } from '@/lib/backend/documentExtractor';
 import { agentTranscribeImage } from '@/lib/backend/agents';
-
-const needsReupload = (content?: string) => !!content && (/^\s*%PDF-|^\s*PK/.test(content) || /\b(endobj|endstream|FlateDecode)\b/.test(content.slice(0, 5000)));
+import { looksBinaryDocument } from '@/lib/backend/inputUtils';
 
 export const SystemContextTab = () => {
   const [isUploading, setIsUploading] = useState(false);
@@ -105,7 +104,7 @@ export const SystemContextTab = () => {
                   <FileText className="h-5 w-5 text-primary" />
                   <div>
                     <p className="text-sm font-medium">{doc.name}</p>
-                    {needsReupload(doc.content) ? (
+                    {looksBinaryDocument(doc.content) ? (
                       <p className="text-xs text-destructive">Stored without text extraction (unreadable) • delete and re-upload</p>
                     ) : (
                       <p className="text-xs text-muted-foreground">

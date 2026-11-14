@@ -3,6 +3,7 @@
  * PDF -> pdf.js, DOCX -> mammoth, XLS/XLSX/ODS -> SheetJS, text formats -> UTF-8.
  * Scanned PDFs and images are rendered to images and transcribed through the optional OCR callback.
  */
+import { getErrorMessage, readAsDataUrl } from './inputUtils.ts';
 
 export type ExtractionMethod = 'text' | 'pdf' | 'pdf-ocr' | 'docx' | 'spreadsheet' | 'legacy-binary' | 'image-ocr' | 'unsupported';
 
@@ -91,14 +92,14 @@ const loadPdfJs = () => {
 const extractPdf = async (file: File, options: ExtractOptions) => {
   const pdfjs = await loadPdfJs();
   const loadingTask = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
-  const pdf = await loadingTask.promise;
   try {
+    const pdf = await loadingTask.promise;
     const pageCount = Math.min(pdf.numPages, MAX_PDF_PAGES);
     const pageTexts: string[] = [];
     for (let i = 1; i <= pageCount; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      const text = content.items.map((item: any) => `${item.str || ''}${item.hasEOL ? '\n' : ' '}`).join('');
+      const text = content.items.map(item => 'str' in item ? `${item.str}${item.hasEOL ? '\n' : ' '}` : '').join('');
       pageTexts.push(text.trim() ? `[Page ${i}]\n${text}` : '');
       page.cleanup();
     }
@@ -117,7 +118,7 @@ const extractPdf = async (file: File, options: ExtractOptions) => {
         const canvas = document.createElement('canvas');
         canvas.width = Math.ceil(viewport.width);
         canvas.height = Math.ceil(viewport.height);
-        await page.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport } as any).promise;
+        await page.render({ canvas, viewport }).promise;
         transcripts.push(`[Page ${i}]\n${await options.ocr(canvas.toDataURL('image/jpeg', 0.85), `${file.name} page ${i}`)}`);
         page.cleanup();
       }
@@ -135,9 +136,9 @@ const extractPdf = async (file: File, options: ExtractOptions) => {
 };
 
 const extractDocx = async (file: File) => {
-  const mammoth: any = await import('mammoth');
-  const result = await (mammoth.default || mammoth).extractRawText({ arrayBuffer: await file.arrayBuffer() });
-  return { method: 'docx' as const, text: result.value as string };
+  const { default: mammoth } = await import('mammoth');
+  const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+  return { method: 'docx' as const, text: result.value };
 };
 
 const extractSpreadsheet = async (file: File) => {
@@ -149,13 +150,6 @@ const extractSpreadsheet = async (file: File) => {
   }).filter(Boolean).join('\n\n');
   return { method: 'spreadsheet' as const, pages: workbook.SheetNames.length, text };
 };
-
-const readAsDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => resolve(reader.result as string);
-  reader.onerror = () => reject(reader.error);
-  reader.readAsDataURL(file);
-});
 
 export async function extractDocument(file: File, options: ExtractOptions = {}): Promise<ExtractedDocument> {
   const maxChars = options.maxChars ?? MAX_DOCUMENT_CHARS;
@@ -179,7 +173,7 @@ export async function extractDocument(file: File, options: ExtractOptions = {}):
       return finish({ ...base, method: 'text', text: await file.text() }, maxChars);
     }
     return finish({ ...base, method: 'unsupported', text: '', status: 'failed', note: `Unsupported file type .${ext}.` }, maxChars);
-  } catch (error: any) {
-    return { ...base, method: 'unsupported', status: 'failed', text: '', note: `Extraction failed: ${error?.message || error}` };
+  } catch (error) {
+    return { ...base, method: 'unsupported', status: 'failed', text: '', note: `Extraction failed: ${getErrorMessage(error)}` };
   }
 }

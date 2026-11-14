@@ -25,6 +25,11 @@ export interface InputStatus {
   note?: string;
 }
 
+export interface ContextInput {
+  section?: ContextSection;
+  status: InputStatus;
+}
+
 const GROUP_TITLES: Record<InputKind, string> = {
   description: 'SYSTEM DESCRIPTION (provided by the user)',
   diagram: 'ARCHITECTURE DIAGRAM ANALYSES (vision model)',
@@ -54,12 +59,19 @@ export const sanitiseSection = (raw: string): { text: string; passed: boolean; r
  * sections is redistributed to longer ones. Returns the number of characters each section may keep.
  */
 export function allocateBudget(lengths: number[], budget: number): number[] {
+  if (!Number.isFinite(budget)) throw new RangeError('Context budget must be finite.');
+  if (lengths.some(length => !Number.isInteger(length) || length < 0)) {
+    throw new RangeError('Section lengths must be non-negative integers.');
+  }
   const allocation = lengths.map(() => 0);
-  let remaining = Math.max(0, budget);
+  let remaining = Math.max(0, Math.floor(budget));
   let open = lengths.map((_, i) => i).filter((i) => lengths[i] > 0);
   while (open.length && remaining > 0) {
     const share = Math.floor(remaining / open.length);
-    if (share === 0) break;
+    if (share === 0) {
+      for (const i of open.slice(0, remaining)) allocation[i]++;
+      break;
+    }
     const next: number[] = [];
     for (const i of open) {
       const take = Math.min(share, lengths[i] - allocation[i]);
@@ -72,11 +84,15 @@ export function allocateBudget(lengths: number[], budget: number): number[] {
   return allocation;
 }
 
-const truncate = (text: string, max: number) => {
-  if (text.length <= max) return text;
-  const cut = text.slice(0, Math.max(0, max - 40));
+const TRUNCATION_MARKER = '\n[... truncated to fit the context budget ...]';
+
+const truncate = (text: string, max: number): { text: string; kept: number } => {
+  if (text.length <= max) return { text, kept: text.length };
+  if (max <= TRUNCATION_MARKER.length) return { text: text.slice(0, max), kept: max };
+  const cut = text.slice(0, max - TRUNCATION_MARKER.length);
   const lastBreak = cut.lastIndexOf('\n');
-  return `${lastBreak > max * 0.8 ? cut.slice(0, lastBreak) : cut}\n[... truncated to fit the context budget ...]`;
+  const body = lastBreak > cut.length * 0.8 ? cut.slice(0, lastBreak) : cut;
+  return { text: `${body}${TRUNCATION_MARKER}`, kept: body.length };
 };
 
 export interface AssembledContext {
@@ -86,20 +102,29 @@ export interface AssembledContext {
 }
 
 export function assembleContext(sections: ContextSection[], budget = CONTEXT_BUDGET_CHARS): AssembledContext {
-  const usable = sections.map((s, index) => ({ ...s, index })).filter((s) => s.text.trim());
-  const headerCost = 160;
-  const allocation = allocateBudget(usable.map((s) => s.text.length), budget - usable.length * headerCost);
+  if (!Number.isFinite(budget) || budget < 0) throw new RangeError('Context budget must be finite and non-negative.');
   const kept = sections.map(() => 0);
+  const usable = sections.map((s, index) => ({
+    ...s, index, text: s.text.trim(),
+    header: s.kind === 'description' ? '' : `--- ${s.name}${s.detail ? ` (${s.detail})` : ''} ---\n`,
+  })).filter(s => s.text);
+  const groups = GROUP_ORDER.map(kind => ({
+    title: `=== ${GROUP_TITLES[kind]} ===`,
+    sources: usable.filter(s => s.kind === kind),
+  })).filter(group => group.sources.length);
+  const headerChars = groups.reduce((sum, group) => sum + group.title.length, 0)
+    + usable.reduce((sum, source) => sum + source.header.length, 0)
+    + Math.max(0, groups.length + usable.length - 1) * 2;
+  if (budget <= headerChars) return { text: '', kept };
+  const allocation = allocateBudget(usable.map(s => s.text.length), budget - headerChars);
+  const limits = new Map(usable.map((s, index) => [s.index, allocation[index]]));
   const parts: string[] = [];
-  for (const kind of GROUP_ORDER) {
-    const group = usable.map((s, i) => ({ s, max: allocation[i] })).filter(({ s }) => s.kind === kind);
-    if (!group.length) continue;
-    parts.push(`=== ${GROUP_TITLES[kind]} ===`);
-    for (const { s, max } of group) {
-      const body = truncate(s.text.trim(), max);
-      kept[s.index] = Math.min(s.text.trim().length, max);
-      const header = kind === 'description' ? '' : `--- ${s.name}${s.detail ? ` (${s.detail})` : ''} ---\n`;
-      parts.push(`${header}${body}`);
+  for (const group of groups) {
+    parts.push(group.title);
+    for (const source of group.sources) {
+      const body = truncate(source.text, limits.get(source.index)!);
+      kept[source.index] = body.kept;
+      parts.push(`${source.header}${body.text}`);
     }
   }
   return { text: parts.join('\n\n'), kept };
@@ -107,15 +132,17 @@ export function assembleContext(sections: ContextSection[], budget = CONTEXT_BUD
 
 /** Splits long text into chunks on paragraph boundaries where possible. */
 export function chunkText(text: string, size: number): string[] {
+  if (!Number.isInteger(size) || size < 1) throw new RangeError('Chunk size must be a positive integer.');
   const chunks: string[] = [];
-  let rest = text;
-  while (rest.length > size) {
-    let cut = rest.lastIndexOf('\n\n', size);
-    if (cut < size * 0.5) cut = rest.lastIndexOf('\n', size);
-    if (cut < size * 0.5) cut = size;
-    chunks.push(rest.slice(0, cut));
-    rest = rest.slice(cut).trimStart();
+  let offset = 0;
+  while (text.length - offset > size) {
+    let cut = text.lastIndexOf('\n\n', offset + size);
+    if (cut < offset + size * 0.5) cut = text.lastIndexOf('\n', offset + size);
+    if (cut < offset + size * 0.5) cut = offset + size;
+    chunks.push(text.slice(offset, cut));
+    offset = cut;
+    while (offset < text.length && /\s/.test(text[offset])) offset++;
   }
-  if (rest.trim()) chunks.push(rest);
+  if (text.slice(offset).trim()) chunks.push(text.slice(offset));
   return chunks;
 }

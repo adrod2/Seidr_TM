@@ -1,16 +1,20 @@
-import { hashInput, getCachedResult, setCachedResult } from './agentCache';
-import { SystemRepresentationGraph, Threat, ComplianceGap } from './types';
+import { getCachedResult, setCachedResult } from './agentCache';
+import type { SystemRepresentationGraph, Threat, ComplianceGap, RepositoryAnalysis, ScannedFile } from './types';
+import type { ThreatModel } from '../db';
 import { callLLM, callVisionLLM } from './llmClient';
 import { parseGitHubUrl, scanGitHubRepository } from './githubScanner';
 import { crawlUrl } from './crawlerClient';
-import { redactPII, scanForPromptInjection } from './securityPipeline';
-import { chunkText } from './analysisContext';
+import { chunkText, sanitiseSection } from './analysisContext';
+import { createConcurrencyLimiter, mapLimit } from './asyncUtils';
+import { hashInput, hashImageInput } from './inputUtils';
+import hybridMethodText from './hybrid-method.md?raw';
+import { buildThreatModelPrompt } from './threatModelPrompt';
 
 /**
  * Diagram Analysis Agent: Uses Vision LLMs to extract dense textual architecture details from an image.
  */
 export const agentAnalyzeDiagram = async (base64DataUrl: string): Promise<string> => {
-  const hash = await hashInput(base64DataUrl.substring(0, 500)); 
+  const hash = await hashImageInput(base64DataUrl);
   const cached = await getCachedResult<string>('diagramAnalysis', hash);
   if (cached) return cached;
 
@@ -78,13 +82,13 @@ Return ONLY a valid JSON object with this EXACT structure:
 /**
  * Repository Analysis Agent: SAST and dependency heuristic scan via GitHub APIs
  */
-export const agentRepositoryAnalysis = async (repositoryUrl: string, context: string): Promise<{ inferredPurpose: string, inherentVulnerabilities: Threat[], scannedFiles: { path: string, size: number }[] }> => {
+export const agentRepositoryAnalysis = async (repositoryUrl: string, context: string): Promise<RepositoryAnalysis> => {
   const hash = await hashInput(`${repositoryUrl}_${context}`);
-  const cached = await getCachedResult<any>('repoAnalysis', hash);
+  const cached = await getCachedResult<RepositoryAnalysis>('repoAnalysis', hash);
   if (cached) return cached;
 
   let repoContext = `Repository URL: ${repositoryUrl}\nContext: ${context}`;
-  let scannedFiles: { path: string, size: number }[] = [];
+  let scannedFiles: ScannedFile[] = [];
 
   // If it's a GitHub URL, parse it and fetch real file trees/manifests
   const githubInfo = parseGitHubUrl(repositoryUrl);
@@ -122,9 +126,9 @@ Return ONLY a valid JSON object with this EXACT structure:
   ]
 }`;
 
-  const result = await callLLM(systemPrompt, repoContext);
+  const result: Omit<RepositoryAnalysis, 'scannedFiles'> = await callLLM(systemPrompt, repoContext);
   
-  const finalResult = { ...(result as any), scannedFiles };
+  const finalResult = { ...result, scannedFiles };
   await setCachedResult('repoAnalysis', hash, finalResult);
   return finalResult;
 };
@@ -133,31 +137,10 @@ Return ONLY a valid JSON object with this EXACT structure:
  * Threat Modeling Agent: Analyzes the SRG alongside the full system context to identify threats.
  */
 export const agentThreatModeling = async (srg: SystemRepresentationGraph, framework: string, systemContext: string): Promise<Threat[]> => {
-  const hash = await hashInput(`${framework}_${JSON.stringify(srg)}_${systemContext}`);
+  const systemPrompt = buildThreatModelPrompt(framework, hybridMethodText);
+  const hash = await hashInput(`${systemPrompt}_${JSON.stringify(srg)}_${systemContext}`);
   const cached = await getCachedResult<Threat[]>('threatModeling', hash);
   if (cached) return cached;
-
-  const systemPrompt = `You are an expert threat modeler using the ${framework} framework. 
-Analyze the provided System Representation Graph (SRG) ALONG WITH the broader System Context.
-The System Context is organised into labelled sections (=== SECTION === and --- source name --- headers): the user's system description, architecture diagram analyses, supporting documents (verbatim or as security digests), crawled reference website intelligence, repository analysis, and the organizational knowledge base.
-You MUST review EVERY section and every source within it. Threats must reflect facts found in the supporting documents, diagrams and website as well as the description (e.g. stated processes, devices, third parties, data handling, remote access, gaps and open questions).
-In the "evidence" field, name the source(s) the evidence comes from (e.g. "Document: Answers.pdf [Page 3]", "Diagram: network.png", "Website", "System description").
-Identify potential threats in deep detail by correlating the architecture with the provided context.
-
-Return ONLY a valid JSON array of objects with this EXACT structure:
-[
-  { 
-    "id": "T-001", 
-    "title": "string", 
-    "description": "string (a comprehensive summary of the threat)", 
-    "evidence": "string (point out the exact components, missing boundaries in the SRG, OR specific clues from the System Context that prove this threat exists)",
-    "reasoning": "string (explain step-by-step how an attacker would exploit this vulnerability)",
-    "category": "string (the threat category according to the ${framework} framework)", 
-    "componentId": "string (name of the vulnerable component from the SRG id or name)", 
-    "cvssScore": 8.5, 
-    "severity": "Critical" | "High" | "Medium" | "Low" 
-  }
-]`;
 
   const promptInput = `System Context:\n${systemContext}\n\nSRG Data:\n${JSON.stringify(srg, null, 2)}`;
   const threatsData = await callLLM(systemPrompt, promptInput);
@@ -198,7 +181,7 @@ export const agentMitigationStrategist = async (threat: Threat, systemContext: s
       
       if (response.ok) {
         const data = await response.json();
-        searchContext = data.results?.map((r: any) => r.content).join('\n') || '';
+        searchContext = data.results?.map((r: { content: string }) => r.content).join('\n') || '';
       } else {
         console.warn('Tavily API returned an error:', await response.text());
       }
@@ -269,14 +252,16 @@ Return ONLY a valid JSON array of objects with this EXACT structure:
 /**
  * Translation Agent: Translates the threat report to a target language.
  */
-export const agentTranslateReport = async (modelData: any, targetLanguage: string): Promise<any> => {
+type TranslatedReport = ThreatModel & { uiStrings?: Record<string, string> };
+
+export const agentTranslateReport = async (modelData: ThreatModel, targetLanguage: string): Promise<TranslatedReport> => {
   const hash = await hashInput(`translate_${modelData.id}_${targetLanguage}`);
-  const cached = await getCachedResult<any>('translation', hash);
+  const cached = await getCachedResult<TranslatedReport>('translation', hash);
   if (cached) return cached;
 
   const payload = {
     name: modelData.name,
-    threats: modelData.threats?.map((t: any) => ({
+    threats: modelData.threats?.map((t: Threat) => ({
       id: t.id,
       title: t.title,
       description: t.description,
@@ -285,7 +270,7 @@ export const agentTranslateReport = async (modelData: any, targetLanguage: strin
       mitigation: t.mitigation,
       severity: t.severity
     })),
-    complianceGaps: modelData.complianceGaps?.map((c: any) => ({
+    complianceGaps: modelData.complianceGaps?.map((c: ComplianceGap) => ({
       controlId: c.controlId,
       title: c.title,
       status: c.status,
@@ -327,12 +312,12 @@ export const agentTranslateReport = async (modelData: any, targetLanguage: strin
     ...modelData,
     name: result.name || modelData.name,
     uiStrings: result.uiStrings,
-    threats: modelData.threats?.map((t: any) => {
-      const trans = result.threats?.find((rt: any) => rt.id === t.id) || {};
+    threats: modelData.threats?.map((t: Threat) => {
+      const trans = result.threats?.find((rt: Threat) => rt.id === t.id) || {};
       return { ...t, ...trans };
     }),
-    complianceGaps: modelData.complianceGaps?.map((c: any) => {
-      const trans = result.complianceGaps?.find((rc: any) => rc.controlId === c.controlId) || {};
+    complianceGaps: modelData.complianceGaps?.map((c: ComplianceGap) => {
+      const trans = result.complianceGaps?.find((rc: ComplianceGap) => rc.controlId === c.controlId) || {};
       return { ...c, ...trans };
     })
   };
@@ -357,12 +342,12 @@ export const agentWebIntelligence = async (url: string): Promise<WebIntelligence
   let skippedPages = 0;
   for (const page of crawl.pages) {
     // Crawled content is untrusted: drop pages that look like prompt injection and redact PII.
-    const clean = page.text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ' ');
-    if (!scanForPromptInjection(clean).passed) {
+    const clean = sanitiseSection(page.text);
+    if (!clean.passed) {
       skippedPages++;
       continue;
     }
-    pages.push({ ...page, text: redactPII(clean).redacted });
+    pages.push({ ...page, text: clean.text });
   }
   if (!pages.length) throw new Error('No crawled pages passed the security gates.');
 
@@ -435,7 +420,7 @@ Use only facts stated in the description.`,
  * Document OCR Agent: Transcribes a page image (scanned PDF page or image attachment) to text.
  */
 export const agentTranscribeImage = async (dataUrl: string, label: string): Promise<string> => {
-  const hash = await hashInput(`ocr_${dataUrl.length}_${dataUrl.slice(-2000)}_${dataUrl.slice(0, 2000)}`);
+  const hash = await hashImageInput(dataUrl, label);
   const cached = await getCachedResult<string>('documentOcr', hash);
   if (cached) return cached;
   const text = await callVisionLLM(
@@ -449,6 +434,7 @@ export const agentTranscribeImage = async (dataUrl: string, label: string): Prom
 };
 
 const DIGEST_CHUNK_CHARS = 60_000;
+const limitDigestCall = createConcurrencyLimiter(3);
 
 /**
  * Document Digest Agent: Condenses a long supporting document into the facts that matter for threat
@@ -470,17 +456,13 @@ Extract EVERY fact relevant to threat modeling, security, privacy or compliance,
 - Stated controls, gaps, assumptions, open questions, risks, and compliance obligations (GDPR, ISO 27001, etc.)
 Use concise Markdown bullets grouped under short headings and cite page/sheet markers like [Page 3] when present. Do not invent facts.`;
 
-  const digests: string[] = new Array(chunks.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < chunks.length) {
-      const index = next++;
-      const label = chunks.length > 1 ? ` (part ${index + 1} of ${chunks.length})` : '';
-      const result = await callLLM(systemPrompt, `<document name="${name.replace(/"/g, "'")}"${label ? ` part="${index + 1}/${chunks.length}"` : ''}>\n${chunks[index]}\n</document>`, 'text');
-      digests[index] = (typeof result === 'string' ? result : JSON.stringify(result)).trim();
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(3, chunks.length) }, worker));
+  const digests = await mapLimit(chunks, 3, (chunk, index) => limitDigestCall(async () => {
+    const part = chunks.length > 1 ? ` part="${index + 1}/${chunks.length}"` : '';
+    const result = await callLLM(systemPrompt, `<document name="${name.replace(/"/g, "'")}"${part}>\n${chunk}\n</document>`, 'text');
+    const text = (typeof result === 'string' ? result : JSON.stringify(result)).trim();
+    if (!text) throw new Error(`Document digest returned no text for ${name}, part ${index + 1}.`);
+    return text;
+  }));
 
   const digest = digests.map((d, i) => chunks.length > 1 ? `[Part ${i + 1}/${chunks.length}]\n${d}` : d).join('\n\n');
   await setCachedResult('documentDigest', hash, digest);

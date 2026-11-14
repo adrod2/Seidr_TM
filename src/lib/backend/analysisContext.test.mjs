@@ -66,3 +66,40 @@ test('extraction helpers strip control characters and recover legacy text', () =
   assert.match(recovered, /Remote access via VPN/);
   assert.match(recovered, /Robots/);
 });
+
+test('tiny budgets and long source headers never exceed the context limit', () => {
+  const sections = [
+    { kind: 'description', name: 'Description', text: 'scope '.repeat(100) },
+    { kind: 'document', name: 'name'.repeat(150), detail: 'details'.repeat(40), text: 'facts '.repeat(1000) },
+    { kind: 'diagram', name: 'diagram.png', text: 'architecture '.repeat(100) },
+  ];
+  for (const budget of [0, 1, 40, 100, 500, 1000, 2000, 10000]) {
+    const result = assembleContext(sections, budget);
+    assert.ok(result.text.length <= budget, `${result.text.length} exceeds ${budget}`);
+    assert.ok(result.kept.every((value, i) => value >= 0 && value <= sections[i].text.trim().length));
+    if (!result.text) assert.deepEqual(result.kept, [0, 0, 0]);
+  }
+});
+
+test('kept counts source characters only, not truncation markers or unused line endings', () => {
+  const source = 'x'.repeat(100) + '\n' + 'y'.repeat(2000);
+  const result = assembleContext([{ kind: 'description', name: 'Description', text: `  ${source}  ` }], 350);
+  const body = result.text.split('\n\n').slice(1).join('\n\n');
+  assert.match(body, /truncated to fit/);
+  const retained = body.slice(0, body.indexOf('\n[...'));
+  assert.equal(result.kept[0], retained.length);
+  assert.equal(retained, source.slice(0, retained.length));
+  assert.ok(result.text.length <= 350);
+});
+
+test('budget allocation uses remainder space fairly', () => {
+  assert.deepEqual(allocateBudget([5, 5, 5], 2), [1, 1, 0]);
+  assert.deepEqual(allocateBudget([1, 100, 100], 6), [1, 3, 2]);
+});
+
+test('invalid chunk sizes and budgets fail explicitly instead of looping', () => {
+  for (const size of [0, -1, 0.5, NaN, Infinity]) assert.throws(() => chunkText('data', size), RangeError);
+  assert.throws(() => assembleContext([], -1), RangeError);
+  assert.throws(() => assembleContext([], Infinity), RangeError);
+  assert.throws(() => allocateBudget([-1], 100), RangeError);
+});

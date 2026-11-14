@@ -2,7 +2,7 @@
 
 Seidr is an advanced, AI-powered threat modeling application designed to streamline the process of identifying, analyzing, and mitigating security risks in software architecture. 
 
-By taking natural language descriptions, system diagrams, and repository URLs, Seidr automatically constructs C4 architecture graphs, generates threat catalogs based on standard frameworks (STRIDE, PASTA, MAESTRO), maps compliance gaps, and formulates actionable mitigation plans.
+By taking natural language descriptions, system diagrams, and repository URLs, Seidr automatically constructs C4 architecture graphs, generates threat catalogs based on standard frameworks (STRIDE, PASTA, MAESTRO) or Hybrid TM, maps compliance gaps, and formulates actionable mitigation plans.
 
 ## 🌟 Key Features
 
@@ -12,11 +12,14 @@ By taking natural language descriptions, system diagrams, and repository URLs, S
 - **System Description Summary**: The Assessment Scope & Knowledge Base card summarises the textual system description used for the analysis, with key security highlights.
 - **Automated C4 Architecture Generation**: Builds editable Level 1, 2, and 3 C4 diagrams in standard C4 notation (people, systems, containers, databases, external systems, system boundary). Auto Layout cycles through six non-overlapping ELK-based arrangements, and a Mermaid view produces a publication-ready diagram with SVG/PNG export.
 - **Intelligent Threat Catalog**: Identifies vulnerabilities, assigns CVSS scores, and explains exploitation paths based on the provided architecture.
+- **Hybrid TM**: Select Hybrid TM in New Model to combine STRIDE security, LINDDUN privacy and PASTA business-risk analysis. The threat agent loads `src/lib/backend/hybrid-method.md` directly into its prompt, adapting the protocol's example stack to your actual system. Findings include business impact and mapped controls in their descriptions, and attack paths plus DREAD risk scoring in their reasoning. Existing CVSS scores and report workflows remain unchanged.
 - **Interactive Mitigation Kanban Board**: Drag-and-drop tasks to track mitigations. Move tasks to "Exception" with mandatory business justifications.
 - **Compliance & Business Risk Mapping**: Automatically evaluates identified threats against required controls (e.g., NIST SP 800-53) and global business risk registers.
 - **AI Security Copilot**: Context-aware chat sidebar to interrogate the threat model, draft Jira tickets, or ask for specific mitigation code snippets.
 - **Global Knowledge Base (RAG)**: Upload organizational policies and standards in the Admin dashboard to inform the AI's compliance and threat evaluations.
 - **Multilingual Exports**: Export reports to PDF, CSV, or JSON. Built-in agentic translation allows exporting the entire threat model in multiple languages (Spanish, German, French, etc.).
+
+Context budgets account for section headings, source labels, and truncation markers; **Inputs Analysed** counts only source characters retained, not those labels or markers. Document-digest requests share a limit of three simultaneous calls across documents, and each upload batch processes at most three files at once. Image-analysis cache keys hash the complete image (plus the source label for OCR), preventing different images with similar file headers from sharing results.
 
 ## 🛡️ Architecture & Security Pipeline
 
@@ -115,11 +118,12 @@ A static-only deployment (including the existing Vercel configuration) cannot ru
 ### Tests
 
 ```bash
-pnpm test           # everything below plus C4 layout and Mermaid generation
+pnpm test           # bridge, crawler, C4, context budgeting, input handling, concurrency, Hybrid prompts
 pnpm test:copilot   # Copilot bridge and URL crawler only
 ```
 
 The crawler tests run against a local test server. The Copilot tests use a fake SDK client; they cover authentication failures, model selection, vision attachments, structured and text outputs, parallel mitigations, tool restrictions, and browser transport errors without spending Copilot quota.
+Input-processing tests cover exact context limits, per-source character counts, ordered concurrent jobs, failures releasing concurrency slots, complete-image hashing, and document extraction. Hybrid prompt tests confirm the bundled protocol is loaded only for Hybrid TM.
 
 ## 📁 Project Structure
 
@@ -131,6 +135,9 @@ The crawler tests run against a local test server. The Copilot tests use a fake 
   - `orchestrator.ts`: The state machine pipeline that runs the security gates and chains the AI agents together.
   - `documentExtractor.ts`: Browser-side PDF/DOCX/XLSX/text extraction with OCR fallback.
   - `analysisContext.ts`: Per-input sanitisation, context budgeting and labelled context assembly.
+  - `asyncUtils.ts`: Ordered batch processing and shared concurrency limits.
+  - `inputUtils.ts`: File reading, input hashing, unreadable-document detection and error messages.
+  - `threatModelPrompt.ts` / `hybrid-method.md`: Framework-aware threat prompt and the bundled Hybrid protocol.
   - `securityPipeline.ts`: PII redaction and prompt injection prevention.
 - `src/pages/`: Main route views (Dashboard, ModelsList, NewModel, Report, Admin, Instructions).
 - `src/lib/db.ts`: Dexie local database schema configuration.

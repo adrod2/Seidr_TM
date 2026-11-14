@@ -47,3 +47,18 @@ export interface ComplianceGap {
   status: 'Met' | 'Partially Met' | 'Gap Identified';
   description: string;
 }
+
+export interface ScannedFile {
+  path: string;
+  size: number;
+}
+
+export interface RepositoryAnalysis {
+  inferredPurpose: string;
+  inherentVulnerabilities: Threat[];
+  scannedFiles: ScannedFile[];
+}
+
+export type AnalysisResult =
+  | { success: true; modelId: string }
+  | { success: false; error: string };

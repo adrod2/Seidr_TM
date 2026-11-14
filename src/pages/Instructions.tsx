@@ -106,6 +106,11 @@ export const Instructions = () => {
                 Once all context is provided, select your preferred threat modeling framework (e.g., STRIDE) and click <strong>"Run Analysis"</strong>. 
                 The AI pipeline will ingest the data, build a C4 architecture graph, identify threats, and map compliance gaps.
               </p>
+              <p className="text-muted-foreground text-sm leading-relaxed mt-2">
+                Select <strong>Hybrid TM</strong> to combine STRIDE (security), LINDDUN (privacy), and PASTA (business risk).
+                The agent follows the bundled Hybrid protocol using your actual system context. Each finding includes business impact,
+                a mapped control, an attack path, and DREAD (risk scoring) alongside the existing CVSS score.
+              </p>
             </div>
           </div>
         </div>

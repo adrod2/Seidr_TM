@@ -1,10 +1,12 @@
 import { runSecurityPipeline } from './securityPipeline';
 import { agentC4Architect, agentThreatModeling, agentCompliance, agentRepositoryAnalysis, agentMitigationStrategist,
   agentWebIntelligence, agentSummarizeDescription, agentDocumentDigest, fallbackDescriptionSummary, WebIntelligence, DescriptionSummary } from './agents';
-import { ContextSection, InputStatus, CONTEXT_BUDGET_CHARS, INLINE_DOCUMENT_CHARS, assembleContext, sanitiseSection } from './analysisContext';
-import type { ExtractedDocument } from './documentExtractor';
+import { type ContextSection, type InputStatus, type ContextInput, CONTEXT_BUDGET_CHARS, INLINE_DOCUMENT_CHARS, assembleContext, sanitiseSection } from './analysisContext';
+import type { ExtractedDocument, ExtractionMethod } from './documentExtractor';
+import { mapLimit } from './asyncUtils';
+import { getErrorMessage, looksBinaryDocument } from './inputUtils';
 import { db } from '../db';
-import { Threat } from './types';
+import type { Threat, AnalysisResult, ScannedFile } from './types';
 
 export interface AnalysisDiagram {
   name: string;
@@ -55,28 +57,42 @@ const summarizeDescription = async (text: string): Promise<DescriptionSummary> =
   }
 };
 
-// eslint-disable-next-line no-control-regex
-const looksBinary = (text: string) => /^\s*(%PDF-|PK\x03\x04|PK)/.test(text) || /\b(endobj|endstream|FlateDecode)\b/.test(text.slice(0, 5000));
-
-const methodLabel: Record<string, string> = {
+const methodLabel: Record<ExtractionMethod, string> = {
   pdf: 'PDF', 'pdf-ocr': 'scanned PDF, OCR', docx: 'Word', spreadsheet: 'spreadsheet', 'legacy-binary': 'legacy .doc',
   'image-ocr': 'image, OCR', text: 'text', unsupported: 'unsupported',
 };
 
-/** Runs up to `limit` async jobs at once, preserving result order. */
-const mapLimit = async <T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> => {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const index = next++;
-      results[index] = await fn(items[index], index);
-    }
-  }));
-  return results;
+const prepareDocument = async (doc: ExtractedDocument): Promise<ContextInput> => {
+  const base = { kind: 'document' as const, name: doc.name, method: methodLabel[doc.method], sourceChars: doc.text.length };
+  if (doc.status === 'failed' || !doc.text.trim()) {
+    return { status: { ...base, status: doc.status === 'failed' ? 'failed' : 'empty', chars: 0, note: doc.note || 'No readable text found.' } };
+  }
+  const clean = sanitiseSection(doc.text);
+  if (!clean.passed) {
+    return { status: { ...base, status: 'excluded', chars: 0, note: `Excluded by the prompt-injection gate: ${clean.reason}` } };
+  }
+  const detail = [methodLabel[doc.method], doc.pages ? `${doc.pages} ${doc.method === 'spreadsheet' ? 'sheet(s)' : 'page(s)'}` : ''].filter(Boolean).join(', ');
+  const section: ContextSection = { kind: 'document', name: `Document: ${doc.name}`, detail, text: clean.text };
+  if (clean.text.length <= INLINE_DOCUMENT_CHARS) {
+    return { section, status: { ...base, status: doc.status === 'partial' ? 'truncated' : 'included', chars: 0, note: doc.note } };
+  }
+  try {
+    const digest = sanitiseSection(await agentDocumentDigest(doc.name, clean.text));
+    if (!digest.passed || !digest.text) throw new Error('Digest was empty or failed the prompt-injection gate.');
+    return {
+      section: { ...section, detail: `${detail}, security digest of ${clean.text.length.toLocaleString()} characters`, text: digest.text },
+      status: { ...base, status: 'digested', chars: 0, note: [doc.note, `Condensed by the document digest agent from ${clean.text.length.toLocaleString()} characters.`].filter(Boolean).join(' ') },
+    };
+  } catch (error) {
+    console.warn(`Digest failed for ${doc.name}; including the beginning verbatim.`, error);
+    return {
+      section: { ...section, text: clean.text.slice(0, INLINE_DOCUMENT_CHARS) },
+      status: { ...base, status: 'truncated', chars: 0, note: `Digest failed (${getErrorMessage(error)}); first ${INLINE_DOCUMENT_CHARS.toLocaleString()} characters used.` },
+    };
+  }
 };
 
-export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress: (step: number) => void) => {
+export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress: (step: number) => void): Promise<AnalysisResult> => {
   try {
     const userText = payload.userDescription?.trim();
     const inputs: InputStatus[] = [];
@@ -121,30 +137,7 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     }
 
     // Supporting documents: each is sanitised independently; long ones are condensed by the digest agent.
-    const docResults = await mapLimit(payload.documents || [], 3, async (doc) => {
-      const base = { kind: 'document' as const, name: doc.name, method: methodLabel[doc.method] || doc.method, sourceChars: doc.text.length };
-      if (doc.status === 'failed' || !doc.text.trim()) {
-        return { status: { ...base, status: doc.status === 'failed' ? 'failed' : 'empty', chars: 0, note: doc.note || 'No readable text found.' } as InputStatus };
-      }
-      const clean = sanitiseSection(doc.text);
-      if (!clean.passed) return { status: { ...base, status: 'excluded', chars: 0, note: `Excluded by the prompt-injection gate: ${clean.reason}` } as InputStatus };
-      const detail = [methodLabel[doc.method], doc.pages ? `${doc.pages} ${doc.method === 'spreadsheet' ? 'sheet(s)' : 'page(s)'}` : ''].filter(Boolean).join(', ');
-      if (clean.text.length <= INLINE_DOCUMENT_CHARS) {
-        return { section: { kind: 'document', name: `Document: ${doc.name}`, detail, text: clean.text } as ContextSection,
-          status: { ...base, status: doc.status === 'partial' ? 'truncated' : 'included', chars: 0, note: doc.note } as InputStatus };
-      }
-      try {
-        const digest = await agentDocumentDigest(doc.name, clean.text);
-        const digestClean = sanitiseSection(digest);
-        if (!digestClean.passed) throw new Error('digest failed the prompt-injection gate');
-        return { section: { kind: 'document', name: `Document: ${doc.name}`, detail: `${detail}, security digest of ${clean.text.length.toLocaleString()} characters`, text: digestClean.text } as ContextSection,
-          status: { ...base, status: 'digested', chars: 0, note: [doc.note, `Condensed by the document digest agent from ${clean.text.length.toLocaleString()} characters.`].filter(Boolean).join(' ') } as InputStatus };
-      } catch (error: any) {
-        console.warn(`Digest failed for ${doc.name}; including the beginning verbatim.`, error);
-        return { section: { kind: 'document', name: `Document: ${doc.name}`, detail, text: clean.text.slice(0, INLINE_DOCUMENT_CHARS) } as ContextSection,
-          status: { ...base, status: 'truncated', chars: 0, note: `Digest failed (${error?.message || error}); first ${INLINE_DOCUMENT_CHARS.toLocaleString()} characters used.` } as InputStatus };
-      }
-    });
+    const docResults = await mapLimit(payload.documents || [], 3, prepareDocument);
     for (const result of docResults) {
       if (result.section) addSection(result.section, result.status);
       else inputs.push(result.status);
@@ -156,8 +149,8 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     if (payload.sourceUrl && !webIntel) {
       try {
         webIntel = await agentWebIntelligence(payload.sourceUrl);
-      } catch (e: any) {
-        webIntelligenceError = e?.message || 'Crawl failed';
+      } catch (e) {
+        webIntelligenceError = getErrorMessage(e);
         console.warn('URL documentation crawl failed, continuing without it.', e);
       }
     }
@@ -181,7 +174,7 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
 
     onProgress(2);
     let repoThreats: Threat[] = [];
-    let repoScannedFiles: { path: string, size: number }[] = [];
+    let repoScannedFiles: ScannedFile[] = [];
     if (payload.repositoryUrl) {
       try {
         const repoAnalysis = await agentRepositoryAnalysis(payload.repositoryUrl, assembleContext(sections, REPOSITORY_CONTEXT_CHARS).text);
@@ -193,9 +186,9 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
           addSection({ kind: 'repository', name: `Repository: ${payload.repositoryUrl}`, detail: `${repoScannedFiles.length} file(s) scanned`, text: clean.text },
             { kind: 'repository', name: payload.repositoryUrl, status: 'included', chars: 0, sourceChars: clean.text.length, method: `${repoScannedFiles.length} files` });
         }
-      } catch (e: any) {
+      } catch (e) {
         console.warn('Repository analysis failed, skipping repo specific threats.', e);
-        inputs.push({ kind: 'repository', name: payload.repositoryUrl, status: 'failed', chars: 0, note: e?.message || 'Repository analysis failed.' });
+        inputs.push({ kind: 'repository', name: payload.repositoryUrl, status: 'failed', chars: 0, note: getErrorMessage(e) });
       }
     }
 
@@ -207,7 +200,7 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
         inputs.push({ kind: 'knowledge', name: doc.name, status: 'empty', chars: 0, note: 'No text stored for this document.' });
         continue;
       }
-      if (looksBinary(content)) {
+      if (looksBinaryDocument(content)) {
         inputs.push({ kind: 'knowledge', name: doc.name, status: 'failed', chars: 0, note: 'Stored without text extraction; re-upload it in Administration > System Context.' });
         continue;
       }
@@ -221,8 +214,8 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     }
 
     onProgress(3);
-    const architectureSections = sections.map((s, i) => ({ s, i })).filter(({ s }) => s.kind !== 'knowledge');
-    const c4Context = assembleContext(architectureSections.map(({ s }) => s), CONTEXT_BUDGET_CHARS).text;
+    const architectureSections = sections.filter(s => s.kind !== 'knowledge');
+    const c4Context = assembleContext(architectureSections, CONTEXT_BUDGET_CHARS).text;
     const srg = await agentC4Architect(c4Context);
 
     onProgress(4);
@@ -230,7 +223,7 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     threatContext.kept.forEach((kept, sectionIndex) => {
       const status = inputs[sectionInput[sectionIndex]];
       status.chars = kept;
-      if (kept < sections[sectionIndex].text.trim().length && status.status === 'included') {
+      if (kept < sections[sectionIndex].text.trim().length) {
         status.status = 'truncated';
         status.note = [status.note, 'Shortened to fit the analysis context budget.'].filter(Boolean).join(' ');
       }
@@ -297,8 +290,8 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     });
 
     return { success: true, modelId: newModelId };
-  } catch (error: any) {
+  } catch (error) {
     console.error('Pipeline Error:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: getErrorMessage(error) };
   }
 };

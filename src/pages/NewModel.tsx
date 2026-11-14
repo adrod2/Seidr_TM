@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { 
-  FileText, 
+  FileText,
   Image as ImageIcon, 
   Github, 
   Upload,
@@ -23,6 +23,8 @@ import { toast } from 'sonner';
 import { startAnalysisPipeline } from '@/lib/backend/orchestrator';
 import { agentAnalyzeDiagram, agentTranscribeImage, agentWebIntelligence, WebIntelligence } from '@/lib/backend/agents';
 import { ExtractedDocument, SUPPORTED_DOCUMENT_ACCEPT, extractDocument } from '@/lib/backend/documentExtractor';
+import { getErrorMessage, readAsDataUrl } from '@/lib/backend/inputUtils';
+import { mapLimit } from '@/lib/backend/asyncUtils';
 import { TabButton } from '@/components/TabButton';
 
 const analysisSteps = [
@@ -85,18 +87,14 @@ export const NewModel = () => {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const newFiles = Array.from(e.target.files);
+      e.target.value = '';
       
       const newDiagrams: UploadedDiagram[] = newFiles.map(f => ({ file: f, isAnalyzing: true }));
       setUploadedDiagrams(prev => [...prev, ...newDiagrams]);
       
-      for (const newDiag of newDiagrams) {
+      await mapLimit(newDiagrams, 3, async (newDiag) => {
         try {
-          const base64DataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (event) => resolve(event.target?.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(newDiag.file);
-          });
+          const base64DataUrl = await readAsDataUrl(newDiag.file);
           
           const desc = await agentAnalyzeDiagram(base64DataUrl);
           
@@ -104,13 +102,13 @@ export const NewModel = () => {
             d.file === newDiag.file ? { ...d, description: desc, isAnalyzing: false } : d
           ));
           toast.success(`Vision Analysis complete for ${newDiag.file.name}`);
-        } catch (error: any) {
+        } catch (error) {
           setUploadedDiagrams(prev => prev.map(d => 
-            d.file === newDiag.file ? { ...d, isAnalyzing: false, error: error.message } : d
+            d.file === newDiag.file ? { ...d, isAnalyzing: false, error: getErrorMessage(error) } : d
           ));
           toast.error(`Failed to analyze ${newDiag.file.name}`);
         }
-      }
+      });
     }
   };
 
@@ -119,7 +117,7 @@ export const NewModel = () => {
     const newFiles = Array.from(e.target.files);
     e.target.value = '';
     setUploadedDocs(prev => [...prev, ...newFiles.map(file => ({ file, isExtracting: true }))]);
-    for (const file of newFiles) {
+    await mapLimit(newFiles, 3, async (file) => {
       const result = await extractDocument(file, { ocr: agentTranscribeImage });
       setUploadedDocs(prev => prev.map(d => d.file === file ? { ...d, isExtracting: false, result } : d));
       if (result.status === 'failed' || result.status === 'empty') {
@@ -127,7 +125,7 @@ export const NewModel = () => {
       } else {
         toast.success(`${file.name}: ${result.text.length.toLocaleString()} characters extracted${result.status === 'partial' ? ' (partial)' : ''}.`);
       }
-    }
+    });
   };
 
   const removeDiagram = (index: number) => {
@@ -163,9 +161,10 @@ export const NewModel = () => {
       const result = await agentWebIntelligence(url);
       setWebIntel(result);
       toast.success(`Documentation agent analysed ${result.pages.length} page(s) from ${new URL(result.sourceUrl).hostname}`);
-    } catch (error: any) {
-      setCrawlError(error.message || 'Crawl failed');
-      toast.error(`URL scan failed: ${error.message}`);
+    } catch (error) {
+      const message = getErrorMessage(error);
+      setCrawlError(message);
+      toast.error(`URL scan failed: ${message}`);
     } finally {
       setIsCrawling(false);
     }
@@ -210,20 +209,15 @@ export const NewModel = () => {
     let diagrams = uploadedDiagrams;
     const failedDiagrams = uploadedDiagrams.filter(d => !d.description);
     if (failedDiagrams.length) {
-      diagrams = await Promise.all(uploadedDiagrams.map(async (d) => {
+      diagrams = await mapLimit(uploadedDiagrams, 3, async (d) => {
         if (d.description) return d;
         try {
-          const dataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(d.file);
-          });
+          const dataUrl = await readAsDataUrl(d.file);
           return { ...d, description: await agentAnalyzeDiagram(dataUrl), error: undefined };
-        } catch (error: any) {
-          return { ...d, error: error?.message || 'Vision analysis failed' };
+        } catch (error) {
+          return { ...d, error: getErrorMessage(error) };
         }
-      }));
+      });
       setUploadedDiagrams(diagrams);
       const stillFailed = diagrams.filter(d => !d.description);
       if (stillFailed.length) toast.warning(`${stillFailed.length} diagram(s) could not be analysed and are listed as failed in the report.`);
@@ -255,7 +249,7 @@ export const NewModel = () => {
       }
     );
 
-    if (result.success) {
+    if (result.success === true) {
       toast.success('Threat model generated successfully');
       setTimeout(() => navigate(`/models/${result.modelId}`), 800);
     } else {
@@ -339,7 +333,10 @@ export const NewModel = () => {
             placeholder="System Name (Required)..."
           />
           <p className={`text-sm mt-1 ${showNameError ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
-            {showNameError ? 'A system name is required to begin analysis.' : 'Provide system context to begin the analysis.'}
+            {showNameError ? 'A system name is required to begin analysis.'
+              : selectedFramework === 'Hybrid TM'
+                ? 'Hybrid combines security (STRIDE), privacy (LINDDUN), and business risk (PASTA).'
+                : 'Provide system context to begin the analysis.'}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -353,6 +350,7 @@ export const NewModel = () => {
                <option value="STRIDE">STRIDE</option>
                <option value="PASTA">PASTA</option>
                <option value="MAESTRO">MAESTRO</option>
+               <option value="Hybrid TM">Hybrid TM</option>
              </select>
           </div>
           <button 
