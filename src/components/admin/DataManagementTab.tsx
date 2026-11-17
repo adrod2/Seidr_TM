@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Loader2, Trash2, AlertTriangle, Calendar, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/lib/db';
+import { clearThreatModels, db, deleteThreatModels } from '@/lib/db';
 
 export const DataManagementTab = () => {
   const models = useLiveQuery(() => db.threatModels.orderBy('date').reverse().toArray());
@@ -30,7 +30,7 @@ export const DataManagementTab = () => {
   const handleDeleteSelected = async () => {
     if (selectedIds.size === 0) return;
     if (confirm(`Are you sure you want to delete ${selectedIds.size} selected threat models?`)) {
-      await db.threatModels.bulkDelete(Array.from(selectedIds));
+      await deleteThreatModels(Array.from(selectedIds));
       setSelectedIds(new Set());
       toast.success(`Deleted ${selectedIds.size} threat models successfully.`);
     }
@@ -38,7 +38,7 @@ export const DataManagementTab = () => {
 
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this threat model?')) {
-      await db.threatModels.delete(id);
+      await deleteThreatModels([id]);
       
       // Remove from selection if it was selected
       const newSelected = new Set(selectedIds);
@@ -62,7 +62,7 @@ export const DataManagementTab = () => {
       }
       
       const ids = oldModels.map(m => m.id);
-      await db.threatModels.bulkDelete(ids);
+      await deleteThreatModels(ids);
       setSelectedIds(new Set()); // Reset selection to be safe
       toast.success(`Deleted ${ids.length} old threat models.`);
     }
@@ -71,7 +71,7 @@ export const DataManagementTab = () => {
   const handleClearAll = async () => {
     if (confirm('Are you sure you want to delete ALL threat models? This action is irreversible.')) {
       setIsClearing(true);
-      await db.threatModels.clear();
+      await clearThreatModels();
       setSelectedIds(new Set());
       setIsClearing(false);
       toast.success('All threat models cleared.');

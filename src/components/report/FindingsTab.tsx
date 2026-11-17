@@ -33,6 +33,8 @@ export function FindingsTab({
   model,
   onThreatSelect,
 }: FindingsTabProps) {
+  const repositoryUrls = model.assessmentMeta?.repositoryUrls
+    ?? (model.assessmentMeta?.repositoryUrl ? [model.assessmentMeta.repositoryUrl] : []);
   // Older models predate stored summaries: derive an extractive summary from the saved context.
   const descriptionFallback = useMemo(() => {
     const raw = model.description || '';
@@ -469,10 +471,12 @@ export function FindingsTab({
                     <span className="font-bold bg-background border border-border/50 px-2 py-0.5 rounded-md">{model.assessmentMeta.diagramsCount}</span>
                   </div>
                   <div className="flex flex-col gap-1.5 bg-secondary/30 px-4 py-3 rounded-xl border border-border/50 text-sm">
-                    <span className="font-medium text-muted-foreground">Repository Attached</span>
-                    <span className="text-xs font-mono font-medium truncate text-foreground bg-background border border-border/50 px-2 py-1 rounded-md">
-                      {model.assessmentMeta.repositoryUrl || 'None'}
-                    </span>
+                    <span className="font-medium text-muted-foreground">Repositories Attached ({repositoryUrls.length})</span>
+                    {repositoryUrls.length ? repositoryUrls.map(url => (
+                      <span key={url} title={url} className="text-xs font-mono font-medium break-all text-foreground bg-background border border-border/50 px-2 py-1 rounded-md">
+                        {url}
+                      </span>
+                    )) : <span className="text-xs text-muted-foreground">None</span>}
                   </div>
                   <div className="flex flex-col gap-1.5 bg-secondary/30 px-4 py-3 rounded-xl border border-border/50 text-sm">
                     <span className="font-medium text-muted-foreground">Reference URL Crawled</span>
@@ -506,13 +510,17 @@ export function FindingsTab({
                 {model.assessmentMeta.scannedFiles && model.assessmentMeta.scannedFiles.length > 0 ? (
                   <div className="border border-border/50 rounded-xl overflow-hidden shadow-sm">
                     <div className="bg-secondary/50 px-4 py-2.5 text-xs font-bold text-muted-foreground border-b border-border/50 flex justify-between">
-                      <span>Priority Files Analyzed ({model.assessmentMeta.scannedFiles.length})</span>
+                      <span>Repository Files Read ({model.assessmentMeta.scannedFiles.length})</span>
                       <span>Size</span>
                     </div>
                     <div className="max-h-40 overflow-y-auto bg-card">
                       {model.assessmentMeta.scannedFiles.map((f, i) => (
                         <div key={i} className="flex justify-between items-center px-4 py-2 border-b border-border/50 last:border-0 text-xs hover:bg-secondary/20 transition-colors">
-                          <span className="truncate font-mono mr-2 text-foreground font-medium" title={f.path}>{f.path.split('/').pop()}</span>
+                          <span className="min-w-0 mr-2">
+                            <span className="block truncate font-mono text-foreground font-medium" title={f.path}>{f.path.split('/').pop()}</span>
+                            {f.kind && <span className="block text-[10px] text-muted-foreground">{f.kind === 'documentation' ? 'Documentation' : 'Static code sample'}</span>}
+                            {f.repositoryUrl && <span className="block truncate text-[10px] text-muted-foreground" title={f.repositoryUrl}>{f.repositoryUrl}</span>}
+                          </span>
                           <span className="text-muted-foreground whitespace-nowrap bg-secondary px-1.5 py-0.5 rounded border border-border/50">{formatBytes(f.size)}</span>
                         </div>
                       ))}

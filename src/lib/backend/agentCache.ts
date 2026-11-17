@@ -1,5 +1,4 @@
-import { supabase } from '../supabase';
-import { db } from '../db';
+import { db } from '../db.ts';
 
 const cacheKey = async (agentName: string, inputHash: string) => {
   const config = await db.aiConfig.get('default');
@@ -9,18 +8,12 @@ const cacheKey = async (agentName: string, inputHash: string) => {
 };
 
 /**
- * Checks Supabase for a cached agent result.
+ * Analysis results may contain private repository context; keep them on this device.
  */
 export const getCachedResult = async <T>(agentName: string, inputHash: string): Promise<T | null> => {
   try {
-    const { data, error } = await supabase
-      .from('agent_result_cache')
-      .select('result')
-      .eq('hash_key', await cacheKey(agentName, inputHash))
-      .gt('expires_at', new Date().toISOString())
-      .single();
-
-    if (error || !data) return null;
+    const data = await db.agentResults.get(await cacheKey(agentName, inputHash));
+    if (!data || data.expiresAt <= Date.now()) return null;
     return data.result as T;
   } catch (err) {
     console.warn('Cache read failed (using bypass)', err);
@@ -29,18 +22,14 @@ export const getCachedResult = async <T>(agentName: string, inputHash: string): 
 };
 
 /**
- * Saves an agent's result to the cache. Default expiry is 7 days.
+ * Saves an agent's result locally. Default expiry is 7 days.
  */
 export const setCachedResult = async (agentName: string, inputHash: string, result: unknown, daysToLive = 7): Promise<void> => {
   try {
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + daysToLive);
-
-    await supabase.from('agent_result_cache').upsert({
-      hash_key: await cacheKey(agentName, inputHash),
-      agent_name: agentName,
-      result: result,
-      expires_at: expiresAt.toISOString(),
+    await db.agentResults.put({
+      key: await cacheKey(agentName, inputHash),
+      result,
+      expiresAt: Date.now() + daysToLive * 24 * 60 * 60 * 1000,
     });
   } catch (err) {
     console.warn('Cache write failed (ignoring)', err);

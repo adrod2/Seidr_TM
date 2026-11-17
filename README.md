@@ -7,6 +7,10 @@ By taking natural language descriptions, system diagrams, and repository URLs, S
 ## 🌟 Key Features
 
 - **Multi-Modal Context Ingestion**: Understands your system through text descriptions, architecture diagram uploads (using Vision LLMs), and heuristic repository scans.
+- **Multiple Code Repositories**: Use **Add Repository** in New Model > Repositories to include several repositories in one assessment. Blank rows and duplicate URLs are ignored. Up to three repository analyses run concurrently; each successful analysis is labelled in the shared architecture and threat context. Findings and scanned files retain their repository source, while failures appear separately under Inputs Analysed. GitHub URLs support file scanning; other providers supply URL-based context only. Older single-repository reports remain supported.
+- **Authenticated GitHub Access**: Check the real GitHub connection in **Administration > Integrations** or **New Model > Repositories**, then browse and add accessible public/private repositories. The local service reuses the active `gh` account on `github.com`; no token reaches the frontend. Repository metadata, documentation and source files all use authenticated, read-only GitHub REST endpoints, including private file content through the Contents API.
+- **Redo Threat Model**: Open a completed report and select **Redo Threat Model** to open an editable new assessment with its original description, methodology, repository URLs, reference URL, document text, diagram analyses and original attachments prefilled. Modify/remove/replace inputs or choose another methodology, then run to create a separate model. Repository and website context is fetched again. The original report is never overwritten. Older reports without saved input snapshots can recover only retained text/URLs and show an explicit warning to reattach original files.
+- **Two-Dimensional Repository Analysis**: Static code/configuration/dependency review (SAST/SCA) runs alongside metadata and documentation collection. GitHub repository metadata (including topics, description, homepage, license and timestamps), language statistics, latest release notes, README, SECURITY, architecture/design decisions, API documentation and other text docs become separately labelled sources in both C4 and final threat-analysis context. These sources survive empty code findings or a failed code-analysis agent. Long sources use the document digest agent. Documentation is collected independently of the 15-file static-code sample: up to 60 text files, 100,000 characters per file and 600,000 characters total per repository (distributed fairly), with four simultaneous file downloads. Truncation, exclusions, unavailable sources, API limits and incomplete file trees are reported. This does **not** run DAST against a live application. Default-branch text files and the latest release are in scope; external documentation links, wiki/issues, older releases and binary files are not crawled. Attach binary documents using Supporting Documents.
 - **Full Supporting-Document Analysis**: Attachments are parsed in the browser: PDF (pdf.js, with vision OCR for scanned pages), Word (.docx via mammoth, best-effort .doc), Excel/ODS (SheetJS, every sheet), images (OCR), and text formats (CSV, Markdown, JSON/YAML, Terraform, logs, etc.). Every input (description, diagrams, documents, website briefing, repository analysis, knowledge base) is sanitised on its own and added to the threat agent's context as a labelled section with a fair size budget. Long documents are condensed by a Document Digest agent, so no single input can crowd out the rest. A suspicious input is excluded instead of aborting the run. The report's **Inputs Analysed** table shows the status of each input and how many characters were used.
 - **Reference URL Spider**: Optionally provide a public URL; a server-side crawler fetches up to 25 same-site pages (depth 2, 60 s budget, robots.txt honoured, `security.txt`/security/privacy/trust pages seeded) and a Web Documentation agent turns the security, privacy, and architecture content into a cited briefing appended to the analysis context. Private, loopback, and link-local addresses are blocked on every DNS resolution and redirect (SSRF protection), and crawled pages pass the PII and prompt-injection gates.
 - **System Description Summary**: The Assessment Scope & Knowledge Base card summarises the textual system description used for the analysis, with key security highlights.
@@ -25,6 +29,7 @@ Context budgets account for section headings, source labels, and truncation mark
 
 Seidr is designed with a **local-first** approach for sensitive architecture data.
 - **Local Database**: All threat models, context documents, and business risks are stored entirely in your browser using **IndexedDB (via Dexie)**.
+- **Original Inputs and Cache**: New assessments also save original form text (before redaction), document/image blobs, extraction results and vision analyses in a separate local input snapshot for reassessment. Protect access to this browser profile; it is not an encrypted vault. Report exports and translations do not include these private snapshots. Agent-result caching is local too, expires for reuse after seven days, and no longer sends results to Supabase. Deleting a report removes its snapshot/attachments; Delete All Models also clears the local agent cache. Old remote caches, if previously configured, are not automatically deleted.
 - **Credentials**: GitHub Copilot uses the local Copilot runtime's login; no GitHub token is sent to or stored in the browser. Optional legacy providers still store API keys in IndexedDB (not an encrypted secret store).
 - **Copilot Service**: A localhost-only Node.js bridge uses the official `@github/copilot-sdk`. Agent prompts and diagrams are sent through Copilot to the selected model; local-first storage does not mean offline inference. Copilot may retain session history under `COPILOT_HOME` (defaults to your home directory's `.copilot` folder). Coding tools and automatic configuration discovery are disabled for these inference sessions.
 - **3-Gate Security Pipeline**: Before input hits the LLM, it passes through:
@@ -40,7 +45,7 @@ Seidr is designed with a **local-first** approach for sensitive architecture dat
 - **Diagrams & Graphs**: `@xyflow/react` (React Flow)
 - **Data Visualization**: Recharts
 - **Icons**: Lucide React
-- **Backend / Cache**: Supabase (used strictly for hashed LLM result caching)
+- **Backend / Cache**: Local Node.js service and IndexedDB agent-result cache
 - **AI Integrations**: 
   - Default: GitHub Copilot via the official Copilot SDK and local Node.js service
   - Optional providers: OpenAI, Google Gemini, Anthropic Claude, or local Ollama
@@ -57,12 +62,10 @@ SEIDR_COPILOT_PORT=3001
 # Optional: Used by the Mitigation Strategist Agent to search the web for modern security practices
 VITE_TAVILY_API_KEY=your_tavily_key_here
 
-# Used for caching LLM responses to reduce API costs and improve speed
-VITE_SUPABASE_URL=your_supabase_url_here
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key_here
 ```
 
 *Copilot uses your existing CLI login. Never put GitHub credentials in a `VITE_` environment variable: Vite embeds those variables in browser assets. Optional legacy provider keys are configured in **Administration > AI Models** and stored in your browser database.*
+The former `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` cache settings are no longer used.
 
 ## 🚀 Getting Started
 
@@ -82,6 +85,12 @@ copilot login
 
 The SDK includes its own matching runtime; the standalone CLI is used here to establish your login. Model availability, organization policies, and Copilot usage limits apply.
 
+For repository access, install [GitHub CLI](https://cli.github.com/) and sign in separately:
+```bash
+gh auth login --hostname github.com --web
+```
+The Copilot login alone does not grant GitHub repository access. Use an account/token authorized for the target repositories: classic tokens need `repo` for private repositories; fine-grained tokens need the selected repositories plus **Metadata: Read** and **Contents: Read**. Organization policies and SSO (single sign-on) approval may restrict access. Seidr does not request write operations or change your CLI sign-in. Switch CLI accounts with `gh auth switch --hostname github.com`, then use **Check Connection** again.
+
 In one terminal, start the local Copilot service:
 ```bash
 pnpm copilot:server
@@ -92,7 +101,7 @@ In another terminal, start the frontend:
 pnpm dev
 ```
 
-Open `http://127.0.0.1:8080`. Vite proxies `/api/copilot` to `127.0.0.1:3001` (or `SEIDR_COPILOT_PORT`). Both services bind to loopback only; do not expose this single-user bridge as a public or multi-user API.
+Open `http://127.0.0.1:8080`. Vite proxies `/api/copilot`, `/api/crawl` and `/api/github` to `127.0.0.1:3001` (or `SEIDR_COPILOT_PORT`). Both services bind to loopback only; do not expose this single-user bridge as a public or multi-user API. GitHub routes accept only application-header-protected, same-origin read requests; arbitrary remote URLs, write operations and upstream redirects are refused.
 
 ### 3. Initial Configuration
 1. Open the application in your browser.
@@ -100,6 +109,7 @@ Open `http://127.0.0.1:8080`. Vite proxies `/api/copilot` to `127.0.0.1:3001` (o
 3. Go to the **AI Models** tab.
 4. **GitHub Copilot** is selected for new installations. Click **Test Connection** to verify authentication and load available model IDs, then **Save Configuration**. Leave the model blank to use Copilot's text default and automatically select a vision-capable model for diagrams, or choose an explicit model ID (must support vision for image uploads). Copilot's connection test checks authentication and model access without generating a response. Legacy providers remain selectable; their connection test sends a small real prompt.
 5. (Optional) In the **System Context** tab, upload any organizational security policies (PDF, DOCX, CSV) to enhance the AI's contextual awareness.
+6. In **Integrations**, use **Check Connection** under GitHub. Under **New Model > Repositories**, browse your accessible repositories or paste URLs. Access failures, organization restrictions and API limits are reported explicitly.
 
 Existing configured providers are preserved during upgrade. Unconfigured OpenAI defaults migrate to Copilot; existing users can switch explicitly in **AI Models**. Agent caches are namespaced by provider and Copilot model so switching does not reuse another provider's results.
 
@@ -118,12 +128,12 @@ A static-only deployment (including the existing Vercel configuration) cannot ru
 ### Tests
 
 ```bash
-pnpm test           # bridge, crawler, C4, context budgeting, input handling, concurrency, Hybrid prompts
+pnpm test           # Copilot/GitHub bridges, crawler, C4, input/context handling, redo, local cache, Hybrid
 pnpm test:copilot   # Copilot bridge and URL crawler only
 ```
 
 The crawler tests run against a local test server. The Copilot tests use a fake SDK client; they cover authentication failures, model selection, vision attachments, structured and text outputs, parallel mitigations, tool restrictions, and browser transport errors without spending Copilot quota.
-Input-processing tests cover exact context limits, per-source character counts, ordered concurrent jobs, failures releasing concurrency slots, complete-image hashing, and document extraction. Hybrid prompt tests confirm the bundled protocol is loaded only for Hybrid TM.
+Input-processing tests cover exact context limits, per-source character counts, shared sanitization/document summaries, bounded digest failure recovery, ordered concurrent jobs, complete-image hashing, and document extraction. GitHub tests cover read-only access, private file transport, access failures and malformed responses. Redo tests preserve original attachments and isolate editable copies; cache tests prevent remote storage of private analysis. Hybrid prompt tests confirm the bundled protocol is loaded only for Hybrid TM.
 
 ## 📁 Project Structure
 
@@ -132,8 +142,12 @@ Input-processing tests cover exact context limits, per-source character counts, 
   - `agents.ts`: Specific AI prompts and logic for Diagram Analysis, C4 generation, Threat Modeling, Compliance, and Translation.
   - `llmClient.ts`: Routing logic for connecting to different LLM providers.
   - `copilotClient.ts`: Same-origin browser transport to the local Copilot service.
+  - `githubClient.ts`: Validated GitHub connection/repository responses and credential-free browser transport.
   - `orchestrator.ts`: The state machine pipeline that runs the security gates and chains the AI agents together.
   - `documentExtractor.ts`: Browser-side PDF/DOCX/XLSX/text extraction with OCR fallback.
+  - `documentContext.ts`: Shared sanitization, document summaries and bounded fallback for uploads and repository sources.
+  - `modelInputs.ts`: Analysis input contracts, original attachment snapshots and editable/legacy redo recovery.
+  - `repositoryInputs.ts`: Shared repository URL parsing, bounded multi-repository analysis and per-source context.
   - `analysisContext.ts`: Per-input sanitisation, context budgeting and labelled context assembly.
   - `asyncUtils.ts`: Ordered batch processing and shared concurrency limits.
   - `inputUtils.ts`: File reading, input hashing, unreadable-document detection and error messages.
@@ -141,7 +155,8 @@ Input-processing tests cover exact context limits, per-source character counts, 
   - `securityPipeline.ts`: PII redaction and prompt injection prevention.
 - `src/pages/`: Main route views (Dashboard, ModelsList, NewModel, Report, Admin, Instructions).
 - `src/lib/db.ts`: Dexie local database schema configuration.
-- `src/server/copilotServer.mjs`: Local Copilot SDK bridge with authentication/model checks and inference-only sessions; also serves `/api/crawl`.
+- `src/server/copilotServer.mjs`: Local Copilot SDK bridge with authentication/model checks and inference-only sessions; also serves `/api/crawl` and `/api/github`.
+- `src/server/github.mjs`: Read-only GitHub access using local CLI credentials, an endpoint allowlist and bounded responses.
 - `src/server/crawler.mjs`: SSRF-safe reference URL spider.
 - `src/lib/c4Layout.ts` / `src/lib/c4Model.ts`: C4 auto-layout engine (ELK) and C4 element/Mermaid generation.
 

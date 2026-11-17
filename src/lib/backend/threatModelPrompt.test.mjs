@@ -41,3 +41,13 @@ test('editing the method changes only the Hybrid prompt used in the cache key', 
   assert.notEqual(buildThreatModelPrompt('Hybrid TM', method), buildThreatModelPrompt('Hybrid TM', revised));
   assert.equal(buildThreatModelPrompt('STRIDE', method), buildThreatModelPrompt('STRIDE', revised));
 });
+
+test('all frameworks must use repository documentation independently of static code findings', () => {
+  for (const framework of ['Hybrid TM', 'STRIDE', 'PASTA', 'MAESTRO']) {
+    const prompt = buildThreatModelPrompt(framework, method);
+    assert.match(prompt, /Repository metadata and documentation are independent context sources/);
+    assert.match(prompt, /no findings or has failed/);
+    assert.match(prompt, /Distinguish documented claims from verified implementation/);
+    assert.match(prompt, /do not.*claim that live DAST was performed/);
+  }
+});

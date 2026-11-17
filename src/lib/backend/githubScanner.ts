@@ -1,134 +1,207 @@
-"use client";
+import { mapLimit } from './asyncUtils.ts';
+import { getErrorMessage } from './inputUtils.ts';
+import type { RepositorySource, ScannedFile } from './types.ts';
+import { fetchGitHubResource } from './githubClient.ts';
 
-const IGNORED_PATHS = [
-  'node_modules', 'vendor', '.git', 'dist', 'build', 'out', 'bin', 'obj',
-  '.next', '.nuxt', 'coverage', '.cache', 'public/assets'
+const IGNORED_PATHS = new Set([
+  'node_modules', 'vendor', '.git', 'dist', 'build', 'out', 'bin', 'obj', '.next', '.nuxt', 'coverage', '.cache',
+]);
+const CODE_PATTERNS = [
+  /(^|\/)(package\.json|pom\.xml|requirements\.txt|go\.mod|Cargo\.toml)$/,
+  /(^|\/)(Dockerfile|docker-compose)/i, /\.(tf|ya?ml|proto)$/i,
+  /swagger|openapi|graphql|auth|jwt|middleware|permission|rbac|oauth|routes|controllers|handlers|migrations/i,
+  /(^|\/)(api|models|entities|helm|kubernetes|k8s)(\/|$)/i,
 ];
+const CODE_EXTENSIONS = /\.(json|ya?ml|tf|hcl|proto|graphql|gql|[cm]?[jt]sx?|py|go|mod|java|cs|rb|rs|php|sh|toml|xml|txt|properties)$/i;
+const DOCUMENT_EXTENSIONS = /\.(md|mdx|markdown|rst|adoc|asciidoc|txt|html?)$/i;
 
-const IGNORED_EXTENSIONS = [
-  '.jpg', '.jpeg', '.png', '.gif', '.mp4', '.exe', '.dll', '.so', '.dylib', 
-  '.zip', '.tar', '.gz', '.pdf', '.lock', '.svg', '.ico'
-];
+export const GITHUB_SCAN_LIMITS = {
+  codeFiles: 15,
+  documentationFiles: 60,
+  codeCharsPerFile: 3_000,
+  documentationCharsPerFile: 100_000,
+  documentationCharsTotal: 600_000,
+};
 
-// Focus specifically on files that give architectural & security context
-const PRIORITY_FILES = [
-  // Dependency manifests
-  /^package\.json$/, /^pom\.xml$/, /^requirements\.txt$/, /^go\.mod$/, /^Cargo\.toml$/,
-  // IaC/config
-  /^Dockerfile/, /^docker-compose/, /.*\.tf$/, /helm/i, /kubernetes/i, /k8s/i, /.*\.ya?ml$/,
-  // API definitions
-  /swagger/i, /openapi/i, /graphql/i, /.*\.proto$/,
-  // Auth/security
-  /auth/i, /jwt/i, /middleware/i, /permission/i, /rbac/i, /oauth/i,
-  // Routing
-  /routes/i, /controllers/i, /api/i, /handlers/i,
-  // Data models
-  /models/i, /entities/i, /migrations/i,
-  // CI/CD
-  /\.github\/workflows/i, /\.gitlab-ci\.yml$/, /Jenkinsfile/i,
-  // README
-  /^README\.md$/
-];
+interface TreeFile {
+  type: string;
+  path: string;
+  size?: number;
+}
 
-export const parseGitHubUrl = (url: string) => {
+export interface GitHubScan {
+  contextString: string;
+  scannedFiles: ScannedFile[];
+  contextSources: RepositorySource[];
+  collectionNotes: string[];
+}
+
+export const parseGitHubUrl = (value: string) => {
   try {
-    const urlObj = new URL(url);
-    if (urlObj.hostname === 'github.com') {
-      const parts = urlObj.pathname.split('/').filter(Boolean);
-      if (parts.length >= 2) return { owner: parts[0], repo: parts[1].replace('.git', '') };
-    }
-  } catch (e) {
-    // Invalid URL
+    const url = new URL(value);
+    if (url.hostname !== 'github.com' || !['https:', 'http:'].includes(url.protocol)) return null;
+    const [owner, name] = url.pathname.split('/').filter(Boolean);
+    const repo = name?.replace(/\.git$/i, '');
+    if (owner && repo) return { owner, repo };
+  } catch {
+    // Non-GitHub URLs are handled separately by the repository agent.
   }
   return null;
 };
 
-export const scanGitHubRepository = async (owner: string, repo: string): Promise<{ contextString: string, scannedFiles: { path: string, size: number }[] }> => {
-  const scannedFiles: { path: string, size: number }[] = [];
-
-  try {
-    // 1. Fetch Metadata
-    const metaRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
-    if (!metaRes.ok) {
-      if (metaRes.status === 403) throw new Error("GitHub API rate limit exceeded.");
-      throw new Error("Repository not found or private.");
-    }
-    const meta = await metaRes.json();
-    const defaultBranch = meta.default_branch;
-
-    // 2. Fetch File Tree (Recursive)
-    const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${defaultBranch}?recursive=1`);
-    if (!treeRes.ok) throw new Error("Failed to fetch repository tree.");
-    const treeData = await treeRes.json();
-
-    // 3. Filter Tree and Identify Priority Files
-    const paths: string[] = [];
-    const priorityPaths: string[] = [];
-
-    for (const item of treeData.tree) {
-      if (item.type !== 'blob') continue;
-      
-      const path = item.path;
-      
-      // Skip ignored paths & extensions
-      if (IGNORED_PATHS.some(ignore => path.includes(`${ignore}/`) || path.startsWith(`${ignore}/`))) continue;
-      if (IGNORED_EXTENSIONS.some(ext => path.toLowerCase().endsWith(ext))) continue;
-
-      paths.push(path);
-
-      // Check if priority file
-      const filename = path.split('/').pop() || '';
-      if (PRIORITY_FILES.some(regex => regex.test(filename) || regex.test(path))) {
-        priorityPaths.push(path);
-        scannedFiles.push({ path, size: item.size || 0 });
-      }
-    }
-
-    // Limit tree size for the LLM prompt to save tokens
-    const treeSample = paths.slice(0, 400);
-    const treeStr = treeSample.join('\n') + (paths.length > 400 ? `\n...and ${paths.length - 400} more files` : '');
-
-    // 4. Fetch File Contents (Top 15 priority files to serve as SAST/SCA input)
-    const filesToFetch = priorityPaths.slice(0, 15);
-    const fileContents: { path: string, content: string }[] = [];
-
-    await Promise.all(filesToFetch.map(async (path) => {
-      try {
-        // Fetch raw file to bypass standard API rate limits
-        const rawRes = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/${path}`);
-        if (rawRes.ok) {
-          const text = await rawRes.text();
-          // Truncate individual files to ~3000 chars to avoid blowing up the context window
-          fileContents.push({ 
-            path, 
-            content: text.length > 3000 ? text.substring(0, 3000) + '\n...[TRUNCATED]' : text 
-          });
-        }
-      } catch (e) {
-        console.warn(`Failed to fetch raw file: ${path}`);
-      }
-    }));
-
-    // 5. Build the final context string for the Agent
-    let result = `--- GITHUB REPOSITORY DATA ---\n`;
-    result += `Repository: ${owner}/${repo}\n`;
-    result += `Description: ${meta.description || 'None'}\n`;
-    result += `Primary Language: ${meta.language || 'Unknown'}\n\n`;
-    
-    result += `--- FILE TREE (Filtered) ---\n${treeStr}\n\n`;
-
-    result += `--- CRITICAL FILE CONTENTS (SAST/SCA Input) ---\n`;
-    for (const file of fileContents) {
-      result += `\nFile: ${file.path}\n\`\`\`\n${file.content}\n\`\`\`\n`;
-    }
-
-    return { contextString: result, scannedFiles };
-
-  } catch (error: any) {
-    console.warn("GitHub Scan Failed:", error);
-    return { 
-      contextString: `Failed to deeply scan repository: ${error.message}. Proceeding with heuristic analysis based on URL only.`,
-      scannedFiles 
-    };
+const request = async (url: string): Promise<Response> => {
+  const response = await fetchGitHubResource(url);
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(`GitHub returned HTTP ${response.status}: ${body.error || 'Repository resource could not be read.'}`);
   }
+  return response;
+};
+
+/** Stop downloading large files once the text budget is exhausted. */
+const readBoundedText = async (response: Response, maxChars: number) => {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('GitHub returned an unreadable response body.');
+  const decoder = new TextDecoder();
+  let text = '';
+  try {
+    while (text.length <= maxChars) {
+      const { done, value } = await reader.read();
+      if (done) {
+        text += decoder.decode();
+        return { text: text.slice(0, maxChars), truncated: text.length > maxChars };
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    return { text: text.slice(0, maxChars), truncated: true };
+  } finally {
+    await reader.cancel();
+    reader.releaseLock();
+  }
+};
+
+const isDocumentation = (path: string) =>
+  !/(^|\/)requirements[^/]*\.txt$/i.test(path)
+  && (DOCUMENT_EXTENSIONS.test(path) || /(^|\/)(LICENSE|NOTICE|COPYING)(\.[^/]*)?$/i.test(path));
+
+const documentationRank = (path: string) => {
+  if (/^readme\./i.test(path)) return 0;
+  if (/(^|\/)(security|privacy|architecture|threat[-_]?model)/i.test(path)) return 1;
+  if (/(^|\/)(docs?|documentation|adrs?|decisions)\//i.test(path)) return 2;
+  return 3;
+};
+
+export const scanGitHubRepository = async (owner: string, repo: string): Promise<GitHubScan> => {
+  const api = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+  const metadata: Record<string, unknown> = await (await request(api)).json();
+  if (typeof metadata.default_branch !== 'string' || !metadata.default_branch) {
+    throw new Error('Repository metadata does not specify a default branch.');
+  }
+  const branch = metadata.default_branch;
+  const scannedFiles: ScannedFile[] = [];
+  const contextSources: RepositorySource[] = [{
+    kind: 'metadata', name: 'Repository metadata', url: api, text: JSON.stringify(metadata, null, 2),
+  }];
+  const collectionNotes: string[] = [];
+  const [tree] = await Promise.all([
+    (async () => {
+      const treeUrl = `${api}/git/trees/${encodeURIComponent(branch)}?recursive=1`;
+      try {
+        const data: { tree: TreeFile[]; truncated?: boolean } = await (await request(treeUrl)).json();
+        if (!Array.isArray(data.tree)) throw new Error('GitHub returned an invalid file tree.');
+        if (data.truncated) collectionNotes.push('GitHub truncated the repository tree; some files could not be discovered.');
+        return data.tree;
+      } catch (error) {
+        const note = `File discovery failed: ${getErrorMessage(error)}`;
+        console.warn(note);
+        collectionNotes.push(note);
+        return [];
+      }
+    })(),
+    ...['languages', 'releases/latest'].map(async endpoint => {
+      const url = `${api}/${endpoint}`;
+      const name = endpoint === 'languages' ? 'Languages' : 'Latest release and release notes';
+      try {
+        const response = await fetchGitHubResource(url);
+        if (endpoint === 'releases/latest' && response.status === 404) return;
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(`HTTP ${response.status}: ${body.error || 'Metadata could not be read.'}`);
+        }
+        const body = await readBoundedText(response, GITHUB_SCAN_LIMITS.documentationCharsPerFile);
+        contextSources.push({
+          kind: 'metadata', name, url, text: body.text, status: body.truncated ? 'truncated' : 'included',
+          note: body.truncated ? 'Metadata response exceeded the per-source text limit.' : undefined,
+        });
+      } catch (error) {
+        console.warn(`Could not collect ${name} for ${owner}/${repo}.`, error);
+        contextSources.push({ kind: 'metadata', name, url, text: '', status: 'failed', note: getErrorMessage(error) });
+      }
+    }),
+  ]);
+  // Optional requests may complete out of order; keep the context deterministic.
+  contextSources.sort((a, b) => a.url.localeCompare(b.url));
+  const files = tree.filter(item => item.type === 'blob'
+    && !item.path.split('/').some(part => IGNORED_PATHS.has(part))
+    && !item.path.startsWith('public/assets/'));
+  const documents = files.filter(file => isDocumentation(file.path))
+    .sort((a, b) => documentationRank(a.path) - documentationRank(b.path) || a.path.localeCompare(b.path));
+  const code = files.filter(file => !isDocumentation(file.path)
+    && (CODE_EXTENSIONS.test(file.path) || /(^|\/)Dockerfile[^/]*$/i.test(file.path))
+    && CODE_PATTERNS.some(pattern => pattern.test(file.path)));
+  const binaryDocuments = files.filter(file => /\.(pdf|docx?|pptx?|xlsx?|odt|ods)$/i.test(file.path));
+  if (binaryDocuments.length) {
+    collectionNotes.push(`Binary documents are not collected by the repository text scanner (${binaryDocuments.length} files, including ${binaryDocuments.slice(0, 5).map(file => file.path).join(', ')}). Attach these as Supporting Documents to analyze them.`);
+  }
+  if (documents.length > GITHUB_SCAN_LIMITS.documentationFiles) {
+    collectionNotes.push(`Documentation limit: reading ${GITHUB_SCAN_LIMITS.documentationFiles} of ${documents.length} text documentation files.`);
+  }
+  if (code.length > GITHUB_SCAN_LIMITS.codeFiles) {
+    collectionNotes.push(`Static code sample: reading ${GITHUB_SCAN_LIMITS.codeFiles} of ${code.length} priority files.`);
+  }
+  const selectedDocuments = documents.slice(0, GITHUB_SCAN_LIMITS.documentationFiles);
+  const docChars = Math.min(GITHUB_SCAN_LIMITS.documentationCharsPerFile,
+    Math.floor(GITHUB_SCAN_LIMITS.documentationCharsTotal / Math.max(1, selectedDocuments.length)));
+  const selected = [
+    ...selectedDocuments.map(file => ({ file, kind: 'documentation' as const, limit: docChars })),
+    ...code.slice(0, GITHUB_SCAN_LIMITS.codeFiles).map(file => ({ file, kind: 'code' as const, limit: GITHUB_SCAN_LIMITS.codeCharsPerFile })),
+  ];
+  const contents = await mapLimit(selected, 4, async ({ file, kind, limit }) => {
+    const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
+    const url = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${encodedPath}`;
+    try {
+      const content = await readBoundedText(await request(url), limit);
+      return { file, kind, url, ...content };
+    } catch (error) {
+      console.warn(`Could not read repository file ${file.path}.`, error);
+      return { file, kind, url, text: '', truncated: false, error: getErrorMessage(error) };
+    }
+  });
+  const codeParts: string[] = [];
+  for (const content of contents) {
+    const { file, kind, url, text, truncated } = content;
+    const note = content.error || (truncated ? `Text shortened to ${kind === 'code' ? GITHUB_SCAN_LIMITS.codeCharsPerFile : docChars} characters during collection.` : undefined);
+    if (!content.error) scannedFiles.push({ path: file.path, size: file.size ?? new TextEncoder().encode(text).length, kind });
+    if (kind === 'documentation') {
+      contextSources.push({
+        kind, name: file.path, url, text, sourceChars: text.length,
+        status: content.error ? 'failed' : !text.trim() ? 'empty' : truncated ? 'truncated' : 'included', note,
+      });
+    } else if (content.error) {
+      collectionNotes.push(`${file.path}: ${content.error}`);
+    } else {
+      codeParts.push(`File: ${file.path}\nSource: ${url}\n${text}${note ? `\n[${note}]` : ''}`);
+    }
+  }
+  collectionNotes.push('Repository scope: default-branch text files, repository metadata, languages and latest release; external linked sites, wiki, issues and older releases are not crawled. No live DAST was performed.');
+  return {
+    contextString: [
+      `Repository: ${owner}/${repo}\nDefault branch: ${branch}`,
+      `--- FILE TREE (first 400 of ${files.length} files) ---\n${files.slice(0, 400).map(file => file.path).join('\n')}`,
+      `--- STATIC CODE AND CONFIGURATION SAMPLE (SAST/SCA, NOT DAST) ---\n${codeParts.join('\n\n')}`,
+    ].join('\n\n'),
+    scannedFiles,
+    contextSources,
+    collectionNotes,
+  };
 };

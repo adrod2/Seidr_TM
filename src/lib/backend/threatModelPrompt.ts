@@ -21,6 +21,7 @@ ${hybridInstructions}
 Analyze the provided System Representation Graph (SRG) ALONG WITH the broader System Context.
 The System Context is organised into labelled sections (=== SECTION === and --- source name --- headers): the user's system description, architecture diagram analyses, supporting documents (verbatim or as security digests), crawled reference website intelligence, repository analysis, and the organizational knowledge base.
 You MUST review EVERY section and every source within it. Threats must reflect facts found in the supporting documents, diagrams and website as well as the description (e.g. stated processes, devices, third parties, data handling, remote access, gaps and open questions).
+Repository metadata and documentation are independent context sources, not just code-findings evidence. Analyze their stated architecture, data handling, trust boundaries, business purpose, security/privacy controls and assumptions even when the static code-analysis stream has no findings or has failed. Distinguish documented claims from verified implementation; do not treat absent documentation as proof of a vulnerability or claim that live DAST was performed.
 In the "evidence" field, name the source(s) the evidence comes from (e.g. "Document: Answers.pdf [Page 3]", "Diagram: network.png", "Website", "System description").
 Identify potential threats in deep detail by correlating the architecture with the provided context.
 

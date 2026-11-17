@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
+import type { ModelInputs } from './backend/modelInputs';
 
 export interface ThreatModel {
   id: string;
@@ -14,9 +15,10 @@ export interface ThreatModel {
   assessmentMeta?: {
     diagramsCount: number;
     repositoryUrl?: string;
+    repositoryUrls?: string[];
     localDocuments: string[];
     globalDocuments: string[];
-    scannedFiles?: { path: string; size: number }[];
+    scannedFiles?: import('./backend/types').ScannedFile[];
     descriptionSummary?: string;
     descriptionHighlights?: string[];
     descriptionSource?: 'user' | 'derived' | 'default';
@@ -69,6 +71,12 @@ export interface Integration {
   connected: boolean;
 }
 
+export interface AgentResult {
+  key: string;
+  result: unknown;
+  expiresAt: number;
+}
+
 const db = new Dexie('SeidrLocalDB') as Dexie & {
   threatModels: EntityTable<ThreatModel, 'id'>;
   aiConfig: EntityTable<AiConfig, 'id'>;
@@ -76,6 +84,8 @@ const db = new Dexie('SeidrLocalDB') as Dexie & {
   documents: EntityTable<Document, 'id'>;
   users: EntityTable<User, 'id'>;
   integrations: EntityTable<Integration, 'id'>;
+  modelInputs: EntityTable<ModelInputs, 'modelId'>;
+  agentResults: EntityTable<AgentResult, 'key'>;
 };
 
 // Define database schema
@@ -99,6 +109,9 @@ db.version(2).stores({}).upgrade(async (transaction) => {
   }
 });
 
+db.version(3).stores({ modelInputs: 'modelId' });
+db.version(4).stores({ agentResults: 'key, expiresAt' });
+
 // Seed default config (empty state for clean agentic run)
 db.on('populate', async () => {
   await db.aiConfig.add({
@@ -111,3 +124,14 @@ db.on('populate', async () => {
 });
 
 export { db };
+
+export const deleteThreatModels = (ids: string[]) => db.transaction('rw', db.threatModels, db.modelInputs, async () => {
+  await db.threatModels.bulkDelete(ids);
+  await db.modelInputs.bulkDelete(ids);
+});
+
+export const clearThreatModels = () => db.transaction('rw', db.threatModels, db.modelInputs, db.agentResults, async () => {
+  await db.threatModels.clear();
+  await db.modelInputs.clear();
+  await db.agentResults.clear();
+});

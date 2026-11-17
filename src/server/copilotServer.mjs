@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { CopilotClient, ToolSet } from '@github/copilot-sdk';
 import { crawlSite, CrawlError } from './crawler.mjs';
+import { createGitHubService, GitHubError } from './github.mjs';
 
 const MAX_BODY_BYTES = 15 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 180_000;
@@ -67,10 +68,12 @@ export function createCopilotServer({
     'http://localhost:4173', 'http://127.0.0.1:4173'],
   timeout = REQUEST_TIMEOUT_MS,
   crawl = crawlSite,
+  github = createGitHubService(),
 } = {}) {
   let starting;
   let activeRequests = 0;
   let activeCrawls = 0;
+  let activeGitHubRequests = 0;
   const ready = async () => {
     if (!starting) {
       starting = client.start().catch((error) => {
@@ -92,6 +95,30 @@ export function createCopilotServer({
       if (!['localhost', '127.0.0.1'].includes(host) ||
           (request.headers.origin && !allowedOrigins.includes(request.headers.origin))) {
         throw new HttpError(403, 'This service only accepts requests from the local Seidr application.');
+      }
+      if (request.url?.startsWith('/api/github/')) {
+        if (request.headers['x-seidr-client'] !== '1' || request.headers['sec-fetch-site'] === 'cross-site') {
+          throw new HttpError(403, 'GitHub access requires a request from the local Seidr application.');
+        }
+        if (request.method !== 'GET') throw new HttpError(405, 'GitHub integration supports read-only GET requests.');
+        if (activeGitHubRequests >= 16) throw new HttpError(429, 'GitHub integration is busy. Retry shortly.');
+        activeGitHubRequests++;
+        try {
+          const url = new URL(request.url, 'http://localhost');
+          if (url.pathname === '/api/github/status') send(200, await github.status());
+          else if (url.pathname === '/api/github/repositories') {
+            send(200, await github.repositories(Number(url.searchParams.get('page') ?? '1')));
+          } else if (url.pathname === '/api/github/resource') {
+            const result = await github.resource(url.searchParams.get('url'));
+            response.writeHead(200, {
+              'Content-Type': result.contentType, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+            });
+            response.end(result.body);
+          } else throw new HttpError(404, 'Unknown GitHub integration route.');
+        } finally {
+          activeGitHubRequests--;
+        }
+        return;
       }
       if (request.method === 'GET' && request.url === '/api/copilot/status') {
         await ready();
@@ -175,8 +202,8 @@ export function createCopilotServer({
       }
     } catch (error) {
       if (!response.headersSent) {
-        send(error instanceof HttpError ? error.status : 502, {
-          error: error instanceof HttpError ? error.message
+        send(error instanceof HttpError || error instanceof GitHubError ? error.status : 502, {
+          error: error instanceof HttpError || error instanceof GitHubError ? error.message
             : `Copilot service failed: ${error instanceof Error ? error.message : 'Unknown error'}. ${loginMessage}`,
         });
       } else {

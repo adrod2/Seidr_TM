@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { ShieldAlert, GitMerge, CheckSquare, FileCheck, Download, Share2, Sparkles, Loader2, X, LayoutDashboard } from 'lucide-react';
+import { Link, useParams } from 'react-router-dom';
+import { ShieldAlert, GitMerge, CheckSquare, FileCheck, Download, Share2, Sparkles, Loader2, X, LayoutDashboard, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
@@ -195,7 +195,12 @@ export const Report = () => {
               <span className="px-1">•</span> Generated: {formattedDate}
             </p>
           </div>
-          <div className="flex gap-3 relative">
+          <div className="flex gap-3 relative flex-wrap justify-end">
+            <Link to={`/models/new?redo=${encodeURIComponent(modelData.id)}`}
+              className="bg-secondary/50 text-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-secondary transition-all">
+              <RotateCcw className="h-4 w-4" />
+              Redo Threat Model
+            </Link>
             <button 
               onClick={() => setIsCopilotOpen(true)}
               className="bg-accent/10 text-accent px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-accent/20 transition-all border border-accent/20 shadow-sm"

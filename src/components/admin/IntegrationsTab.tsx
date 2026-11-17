@@ -3,6 +3,7 @@ import { CheckCircle2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
+import { GitHubConnection } from '@/components/GitHubConnection';
 
 export const IntegrationsTab = () => {
   const integrations = useLiveQuery(() => db.integrations.toArray());
@@ -33,6 +34,7 @@ export const IntegrationsTab = () => {
   return (
     <div className="max-w-4xl space-y-6">
       <h3 className="text-lg font-bold mb-2">Connected Services</h3>
+      <GitHubConnection />
       
       <div className={`border rounded-2xl p-5 flex items-center justify-between transition-colors shadow-sm ${getStatus('jira') ? 'border-primary bg-primary/5' : 'border-border/50 bg-card'}`}>
         <div className="flex items-center gap-4">

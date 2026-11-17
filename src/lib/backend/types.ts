@@ -51,12 +51,39 @@ export interface ComplianceGap {
 export interface ScannedFile {
   path: string;
   size: number;
+  repositoryUrl?: string;
+  kind?: 'code' | 'documentation';
+}
+
+export interface RepositorySource {
+  kind: 'metadata' | 'documentation';
+  name: string;
+  url: string;
+  text: string;
+  sourceChars?: number;
+  status?: 'included' | 'digested' | 'truncated' | 'excluded' | 'failed' | 'empty';
+  note?: string;
 }
 
 export interface RepositoryAnalysis {
   inferredPurpose: string;
   inherentVulnerabilities: Threat[];
   scannedFiles: ScannedFile[];
+  contextSources?: RepositorySource[];
+  collectionNotes?: string[];
+  codeAnalysisError?: string;
+}
+
+export interface WebIntelligence {
+  sourceUrl: string;
+  summary: string;
+  pages: { url: string; title: string }[];
+  skippedPages: number;
+}
+
+export interface DescriptionSummary {
+  summary: string;
+  highlights: string[];
 }
 
 export type AnalysisResult =

@@ -1,48 +1,16 @@
 import { runSecurityPipeline } from './securityPipeline';
 import { agentC4Architect, agentThreatModeling, agentCompliance, agentRepositoryAnalysis, agentMitigationStrategist,
-  agentWebIntelligence, agentSummarizeDescription, agentDocumentDigest, fallbackDescriptionSummary, WebIntelligence, DescriptionSummary } from './agents';
-import { type ContextSection, type InputStatus, type ContextInput, CONTEXT_BUDGET_CHARS, INLINE_DOCUMENT_CHARS, assembleContext, sanitiseSection } from './analysisContext';
-import type { ExtractedDocument, ExtractionMethod } from './documentExtractor';
+  agentWebIntelligence, agentSummarizeDescription, agentDocumentDigest, fallbackDescriptionSummary } from './agents';
+import { type ContextSection, type InputStatus, CONTEXT_BUDGET_CHARS, assembleContext, sanitiseSection } from './analysisContext';
+import { prepareDocument } from './documentContext';
 import { mapLimit } from './asyncUtils';
 import { getErrorMessage, looksBinaryDocument } from './inputUtils';
-import { db } from '../db';
-import type { Threat, AnalysisResult, ScannedFile } from './types';
+import { analyseRepositories, getRepositoryUrls } from './repositoryInputs';
+import { db, type ThreatModel } from '../db';
+import type { AnalysisResult, DescriptionSummary, WebIntelligence } from './types';
+import { snapshotModelInputs, type AnalysisPayload } from './modelInputs';
 
-export interface AnalysisDiagram {
-  name: string;
-  description?: string;
-  error?: string;
-}
-
-export interface AnalysisPayload {
-  name: string;
-  /** The system description typed by the user (or the default description when no input was given). */
-  description: string;
-  frameworks: string[];
-  questionnaire?: {
-    deployment: string[];
-    authMethods: string[];
-    dataClassification: string;
-  };
-  repositoryUrl?: string;
-  documentation?: {
-    title: string;
-    content: string;
-  };
-  diagramsCount?: number;
-  localDocuments?: string[];
-  /** Text extracted from each attached supporting document. */
-  documents?: ExtractedDocument[];
-  /** Vision analyses of each uploaded architecture diagram. */
-  diagrams?: AnalysisDiagram[];
-  /** The text the user typed in the System Description field. */
-  userDescription?: string;
-  /** Optional public URL to spider for security, privacy and architecture documentation. */
-  sourceUrl?: string;
-  /** Pre-computed crawl result (e.g. from the New Model preview) to avoid crawling twice. */
-  webIntelligence?: WebIntelligence;
-  usedDefaultDescription?: boolean;
-}
+export type { AnalysisPayload, AnalysisDiagram } from './modelInputs';
 
 const MITIGATION_CONTEXT_CHARS = 60_000;
 const REPOSITORY_CONTEXT_CHARS = 60_000;
@@ -57,43 +25,9 @@ const summarizeDescription = async (text: string): Promise<DescriptionSummary> =
   }
 };
 
-const methodLabel: Record<ExtractionMethod, string> = {
-  pdf: 'PDF', 'pdf-ocr': 'scanned PDF, OCR', docx: 'Word', spreadsheet: 'spreadsheet', 'legacy-binary': 'legacy .doc',
-  'image-ocr': 'image, OCR', text: 'text', unsupported: 'unsupported',
-};
-
-const prepareDocument = async (doc: ExtractedDocument): Promise<ContextInput> => {
-  const base = { kind: 'document' as const, name: doc.name, method: methodLabel[doc.method], sourceChars: doc.text.length };
-  if (doc.status === 'failed' || !doc.text.trim()) {
-    return { status: { ...base, status: doc.status === 'failed' ? 'failed' : 'empty', chars: 0, note: doc.note || 'No readable text found.' } };
-  }
-  const clean = sanitiseSection(doc.text);
-  if (!clean.passed) {
-    return { status: { ...base, status: 'excluded', chars: 0, note: `Excluded by the prompt-injection gate: ${clean.reason}` } };
-  }
-  const detail = [methodLabel[doc.method], doc.pages ? `${doc.pages} ${doc.method === 'spreadsheet' ? 'sheet(s)' : 'page(s)'}` : ''].filter(Boolean).join(', ');
-  const section: ContextSection = { kind: 'document', name: `Document: ${doc.name}`, detail, text: clean.text };
-  if (clean.text.length <= INLINE_DOCUMENT_CHARS) {
-    return { section, status: { ...base, status: doc.status === 'partial' ? 'truncated' : 'included', chars: 0, note: doc.note } };
-  }
-  try {
-    const digest = sanitiseSection(await agentDocumentDigest(doc.name, clean.text));
-    if (!digest.passed || !digest.text) throw new Error('Digest was empty or failed the prompt-injection gate.');
-    return {
-      section: { ...section, detail: `${detail}, security digest of ${clean.text.length.toLocaleString()} characters`, text: digest.text },
-      status: { ...base, status: 'digested', chars: 0, note: [doc.note, `Condensed by the document digest agent from ${clean.text.length.toLocaleString()} characters.`].filter(Boolean).join(' ') },
-    };
-  } catch (error) {
-    console.warn(`Digest failed for ${doc.name}; including the beginning verbatim.`, error);
-    return {
-      section: { ...section, text: clean.text.slice(0, INLINE_DOCUMENT_CHARS) },
-      status: { ...base, status: 'truncated', chars: 0, note: `Digest failed (${getErrorMessage(error)}); first ${INLINE_DOCUMENT_CHARS.toLocaleString()} characters used.` },
-    };
-  }
-};
-
 export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress: (step: number) => void): Promise<AnalysisResult> => {
   try {
+    const repositoryUrls = getRepositoryUrls(payload.repositoryUrls, payload.repositoryUrl);
     const userText = payload.userDescription?.trim();
     const inputs: InputStatus[] = [];
     const sections: ContextSection[] = [];
@@ -112,7 +46,7 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
       payload.questionnaire && `Deployment Model: ${payload.questionnaire.deployment.join(', ') || 'Unknown'}`,
       payload.questionnaire && `Authentication: ${payload.questionnaire.authMethods.join(', ') || 'Unknown'}`,
       payload.questionnaire && `Data Classification: ${payload.questionnaire.dataClassification || 'Unknown'}`,
-      payload.repositoryUrl && `Repository: ${payload.repositoryUrl}`,
+      repositoryUrls.length > 0 && `Repositories:\n${repositoryUrls.join('\n')}`,
       payload.documentation && `Additional Docs [${payload.documentation.title || 'Untitled'}]: ${payload.documentation.content}`,
     ].filter(Boolean).join('\n');
     const { sanitisedInput: sanitisedDescription, piiRedactedCount } = runSecurityPipeline(userContextStr);
@@ -137,7 +71,7 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     }
 
     // Supporting documents: each is sanitised independently; long ones are condensed by the digest agent.
-    const docResults = await mapLimit(payload.documents || [], 3, prepareDocument);
+    const docResults = await mapLimit(payload.documents || [], 3, doc => prepareDocument(doc, agentDocumentDigest));
     for (const result of docResults) {
       if (result.section) addSection(result.section, result.status);
       else inputs.push(result.status);
@@ -173,22 +107,17 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     const descriptionSummaryPromise = summarizeDescription(userText || userInputContext);
 
     onProgress(2);
-    let repoThreats: Threat[] = [];
-    let repoScannedFiles: ScannedFile[] = [];
-    if (payload.repositoryUrl) {
-      try {
-        const repoAnalysis = await agentRepositoryAnalysis(payload.repositoryUrl, assembleContext(sections, REPOSITORY_CONTEXT_CHARS).text);
-        repoThreats = repoAnalysis.inherentVulnerabilities || [];
-        repoScannedFiles = repoAnalysis.scannedFiles || [];
-        const findings = repoThreats.map((t) => `- ${t.title} (${t.severity}): ${t.evidence || t.description}`).join('\n');
-        const clean = sanitiseSection(`Inferred purpose and architecture:\n${repoAnalysis.inferredPurpose}${findings ? `\n\nCode-level findings:\n${findings}` : ''}`);
-        if (clean.passed) {
-          addSection({ kind: 'repository', name: `Repository: ${payload.repositoryUrl}`, detail: `${repoScannedFiles.length} file(s) scanned`, text: clean.text },
-            { kind: 'repository', name: payload.repositoryUrl, status: 'included', chars: 0, sourceChars: clean.text.length, method: `${repoScannedFiles.length} files` });
-        }
-      } catch (e) {
-        console.warn('Repository analysis failed, skipping repo specific threats.', e);
-        inputs.push({ kind: 'repository', name: payload.repositoryUrl, status: 'failed', chars: 0, note: getErrorMessage(e) });
+    const repositories = await analyseRepositories(
+      repositoryUrls, assembleContext(sections, REPOSITORY_CONTEXT_CHARS).text, agentRepositoryAnalysis,
+    );
+    const repoThreats = repositories.flatMap(repo => repo.threats);
+    const repoScannedFiles = repositories.flatMap(repo => repo.scannedFiles);
+    for (const repo of repositories) {
+      if (repo.section) addSection(repo.section, repo.status);
+      else inputs.push(repo.status);
+      for (const source of repo.sources) {
+        if (source.section) addSection(source.section, source.status);
+        else inputs.push(source.status);
       }
     }
 
@@ -260,7 +189,7 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
 
     const descriptionSummary = await descriptionSummaryPromise;
 
-    await db.threatModels.put({
+    const model: ThreatModel = {
       id: newModelId,
       name: payload.name || 'Untitled Threat Model',
       description: fullContextForThreats, // Full analysed context, reused by the report and the AI Copilot chat
@@ -273,7 +202,8 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
       framework,
       assessmentMeta: {
         diagramsCount: payload.diagramsCount ?? payload.diagrams?.length ?? 0,
-        repositoryUrl: payload.repositoryUrl,
+        repositoryUrl: repositoryUrls[0],
+        repositoryUrls,
         localDocuments: payload.localDocuments || payload.documents?.map(d => d.name) || [],
         globalDocuments: globalDocs.map(d => d.name),
         scannedFiles: repoScannedFiles,
@@ -286,7 +216,11 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
         webIntelligenceError,
         inputs,
         contextChars: fullContextForThreats.length,
-      }
+      },
+    };
+    await db.transaction('rw', db.threatModels, db.modelInputs, async () => {
+      await db.modelInputs.put(snapshotModelInputs(newModelId, payload));
+      await db.threatModels.put(model);
     });
 
     return { success: true, modelId: newModelId };

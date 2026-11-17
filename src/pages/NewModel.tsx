@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { 
   FileText,
   Image as ImageIcon, 
@@ -17,20 +17,25 @@ import {
   Search,
   ExternalLink
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { startAnalysisPipeline } from '@/lib/backend/orchestrator';
-import { agentAnalyzeDiagram, agentTranscribeImage, agentWebIntelligence, WebIntelligence } from '@/lib/backend/agents';
+import { agentAnalyzeDiagram, agentTranscribeImage, agentWebIntelligence } from '@/lib/backend/agents';
+import type { WebIntelligence } from '@/lib/backend/types';
 import { ExtractedDocument, SUPPORTED_DOCUMENT_ACCEPT, extractDocument } from '@/lib/backend/documentExtractor';
 import { getErrorMessage, readAsDataUrl } from '@/lib/backend/inputUtils';
 import { mapLimit } from '@/lib/backend/asyncUtils';
+import { getRepositoryUrls } from '@/lib/backend/repositoryInputs';
 import { TabButton } from '@/components/TabButton';
+import { GitHubConnection } from '@/components/GitHubConnection';
+import { db } from '@/lib/db';
+import { getRedoInputs, restoreInputFile, storeInputFile, type AnalysisPayload } from '@/lib/backend/modelInputs';
 
 const analysisSteps = [
   "Reading supporting documents, diagrams and system context...",
   "Spidering reference URL for security & privacy documentation...",
-  "Analyzing repository code and dependencies...",
+  "Analyzing repository code, metadata and documentation...",
   "Parsing architecture diagrams and data flows...",
   "Identifying trust boundaries and components...",
   "Applying threat framework heuristic rules...",
@@ -44,12 +49,14 @@ interface UploadedDiagram {
   description?: string;
   isAnalyzing: boolean;
   error?: string;
+  originalUnavailable?: boolean;
 }
 
 interface UploadedDoc {
   file: File;
   isExtracting: boolean;
   result?: ExtractedDocument;
+  originalUnavailable?: boolean;
 }
 
 const describeExtraction = (doc: UploadedDoc) => {
@@ -69,6 +76,8 @@ export const NewModel = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedFramework, setSelectedFramework] = useState('STRIDE');
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redoId = searchParams.get('redo');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
 
@@ -76,13 +85,65 @@ export const NewModel = () => {
   const [modelName, setModelName] = useState('');
   const [showNameError, setShowNameError] = useState(false);
   const [description, setDescription] = useState('');
-  const [repoUrl, setRepoUrl] = useState('');
+  const [repoUrls, setRepoUrls] = useState(['']);
   const [uploadedDiagrams, setUploadedDiagrams] = useState<UploadedDiagram[]>([]);
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
   const [sourceUrl, setSourceUrl] = useState('');
   const [webIntel, setWebIntel] = useState<WebIntelligence | null>(null);
   const [isCrawling, setIsCrawling] = useState(false);
   const [crawlError, setCrawlError] = useState('');
+  const [loadingRedo, setLoadingRedo] = useState(Boolean(redoId));
+  const [redoError, setRedoError] = useState('');
+  const [redoWarnings, setRedoWarnings] = useState<string[]>([]);
+  const [additionalInputs, setAdditionalInputs] = useState<Pick<AnalysisPayload, 'questionnaire' | 'documentation'>>({});
+
+  useEffect(() => {
+    let active = true;
+    setLoadingRedo(Boolean(redoId));
+    setRedoError('');
+    setRedoWarnings([]);
+    setModelName('');
+    setDescription('');
+    setSelectedFramework('STRIDE');
+    setRepoUrls(['']);
+    setUploadedDiagrams([]);
+    setUploadedDocs([]);
+    setSourceUrl('');
+    setWebIntel(null);
+    setCrawlError('');
+    setAdditionalInputs({});
+    setActiveTab('text');
+    setShowNameError(false);
+    if (!redoId) return () => { active = false; };
+    const load = async () => {
+      try {
+        const [model, saved] = await Promise.all([db.threatModels.get(redoId), db.modelInputs.get(redoId)]);
+        if (!model) throw new Error('The original threat model was not found.');
+        const { payload, warnings } = getRedoInputs(model, saved);
+        if (!active) return;
+        setModelName(payload.name);
+        setDescription(payload.userDescription ?? (payload.usedDefaultDescription ? '' : payload.description));
+        setSelectedFramework(payload.frameworks[0] || 'STRIDE');
+        setRepoUrls(payload.repositoryUrls?.length ? [...payload.repositoryUrls] : payload.repositoryUrl ? [payload.repositoryUrl] : ['']);
+        setSourceUrl(payload.sourceUrl || '');
+        setAdditionalInputs({ questionnaire: payload.questionnaire, documentation: payload.documentation });
+        setUploadedDocs((payload.documents || []).map((doc, index) => ({
+          ...restoreInputFile(payload.inputFiles?.documents[index], doc.name, doc.text), result: doc, isExtracting: false,
+        })));
+        setUploadedDiagrams((payload.diagrams || []).map((diagram, index) => ({
+          ...restoreInputFile(payload.inputFiles?.diagrams[index], diagram.name),
+          description: diagram.description, error: diagram.error, isAnalyzing: false,
+        })));
+        setRedoWarnings(warnings);
+      } catch (error) {
+        if (active) setRedoError(getErrorMessage(error));
+      } finally {
+        if (active) setLoadingRedo(false);
+      }
+    };
+    void load();
+    return () => { active = false; };
+  }, [redoId]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -201,6 +262,15 @@ export const NewModel = () => {
       return;
     }
 
+    let repositoryUrls: string[];
+    try {
+      repositoryUrls = getRepositoryUrls(repoUrls);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+      setActiveTab('git');
+      return;
+    }
+
     setShowNameError(false);
     setIsAnalyzing(true);
     setCurrentStep(0);
@@ -210,7 +280,7 @@ export const NewModel = () => {
     const failedDiagrams = uploadedDiagrams.filter(d => !d.description);
     if (failedDiagrams.length) {
       diagrams = await mapLimit(uploadedDiagrams, 3, async (d) => {
-        if (d.description) return d;
+        if (d.description || d.originalUnavailable) return d;
         try {
           const dataUrl = await readAsDataUrl(d.file);
           return { ...d, description: await agentAnalyzeDiagram(dataUrl), error: undefined };
@@ -223,7 +293,7 @@ export const NewModel = () => {
       if (stillFailed.length) toast.warning(`${stillFailed.length} diagram(s) could not be analysed and are listed as failed in the report.`);
     }
 
-    const hasOtherInputs = diagrams.some(d => d.description) || !!repoUrl || uploadedDocs.some(d => d.result?.text) || !!crawlTarget;
+    const hasOtherInputs = diagrams.some(d => d.description) || repositoryUrls.length > 0 || uploadedDocs.some(d => d.result?.text) || !!crawlTarget;
     const usedDefaultDescription = !description.trim() && !hasOtherInputs;
     const payloadDesc = usedDefaultDescription
       ? "Standard web application running on AWS with React frontend and Node backend using a PostgreSQL database."
@@ -231,10 +301,11 @@ export const NewModel = () => {
 
     const result = await startAnalysisPipeline(
       {
+        ...additionalInputs,
         name: modelName,
         description: payloadDesc,
         frameworks: [selectedFramework],
-        repositoryUrl: repoUrl,
+        repositoryUrls,
         diagramsCount: diagrams.length,
         diagrams: diagrams.map(d => ({ name: d.file.name, description: d.description, error: d.error })),
         localDocuments: uploadedDocs.map(d => d.file.name),
@@ -243,6 +314,10 @@ export const NewModel = () => {
         usedDefaultDescription,
         sourceUrl: crawlTarget || undefined,
         webIntelligence: webIntel && crawlTarget && webIntel.sourceUrl.replace(/\/$/, '') === crawlTarget.replace(/\/$/, '') ? webIntel : undefined,
+        inputFiles: {
+          documents: uploadedDocs.map(doc => doc.originalUnavailable ? null : storeInputFile(doc.file)),
+          diagrams: diagrams.map(diagram => diagram.originalUnavailable ? null : storeInputFile(diagram.file)),
+        },
       },
       (stepNumber) => {
         setCurrentStep(stepNumber);
@@ -257,6 +332,15 @@ export const NewModel = () => {
       setIsAnalyzing(false);
     }
   };
+
+  if (loadingRedo || redoError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-8rem)] gap-4">
+        {loadingRedo ? <><Loader2 className="h-8 w-8 animate-spin text-primary" /><p>Loading original assessment inputs...</p></>
+          : <><p role="alert" className="text-destructive">{redoError}</p><Link to="/models/new" className="text-primary underline">Start a blank threat model</Link></>}
+      </div>
+    );
+  }
 
   if (isAnalyzing) {
     return (
@@ -318,6 +402,12 @@ export const NewModel = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
+      {redoId && (
+        <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm space-y-1">
+          <p>Editing a copy. Change any inputs or methodology, then run a new analysis. The original model is unchanged; repository and website data will be fetched again.</p>
+          {redoWarnings.map(warning => <p key={warning} className="text-amber-600 dark:text-amber-400">{warning}</p>)}
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <div className="flex-1 max-w-md">
           <input 
@@ -346,6 +436,7 @@ export const NewModel = () => {
                value={selectedFramework}
                onChange={(e) => setSelectedFramework(e.target.value)}
                className="bg-secondary/50 border border-border/50 rounded-full pl-9 pr-8 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none cursor-pointer hover:bg-secondary/80 transition-colors shadow-sm"
+               aria-label="Threat modeling methodology"
              >
                <option value="STRIDE">STRIDE</option>
                <option value="PASTA">PASTA</option>
@@ -487,6 +578,7 @@ export const NewModel = () => {
                           : <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
                         <div className="flex flex-col min-w-0">
                           <span className="max-w-[220px] truncate font-medium">{doc.file.name}</span>
+                          {doc.originalUnavailable && <span className="text-[10px] text-amber-600 dark:text-amber-400">Recovered text only; original file unavailable</span>}
                           <span className={`text-[10px] max-w-[220px] truncate ${failed ? 'text-destructive' : 'text-muted-foreground'}`}>
                             {(doc.file.size / 1024).toFixed(0)} KB · {describeExtraction(doc)}
                           </span>
@@ -549,6 +641,7 @@ export const NewModel = () => {
                           )}
                           <div className="truncate">
                             <p className="text-sm font-medium truncate">{diag.file.name}</p>
+                            {diag.originalUnavailable && <p className="text-xs text-amber-600 dark:text-amber-400">Original image unavailable; reattach to re-analyze</p>}
                             <p className="text-xs text-muted-foreground">
                               {diag.isAnalyzing ? 'Extracting architecture details via Vision...' : diag.error ? 'Analysis failed' : 'Architecture extracted successfully'}
                             </p>
@@ -573,25 +666,43 @@ export const NewModel = () => {
           <div className="max-w-2xl">
             <h3 className="text-lg font-semibold mb-4">Connect Code Repositories</h3>
             <p className="text-sm text-muted-foreground mb-6">
-              Connect a GitHub, GitLab, or Bitbucket repository. The AI agent will perform a heuristic scan of configuration, dependencies, and code structure.
+              Add repositories to include in the same threat model. GitHub analysis covers two dimensions: static code and dependency review (SAST/SCA), plus repository metadata and documentation for architecture, security and privacy context. DAST (testing a running application) is not performed. Other providers supply URL-based context only.
             </p>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Repository URL</label>
-                <input 
-                  type="text" 
-                  value={repoUrl}
-                  onChange={(e) => setRepoUrl(e.target.value)}
-                  className="w-full bg-secondary/30 border border-border/50 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary/50" 
-                  placeholder="https://github.com/org/repo" 
-                />
-              </div>
-              <button 
-                onClick={() => toast.promise(new Promise(r => setTimeout(r, 1500)), { loading: 'Verifying connection...', success: 'Repository connected and ready for scan!' })}
+              <GitHubConnection selectedUrls={repoUrls} onAddRepository={url =>
+                setRepoUrls(previous => [...previous.filter(value => value.trim()), url])
+              } />
+              {repoUrls.map((url, index) => (
+                <div key={index}>
+                  <label htmlFor={`repository-${index}`} className="block text-sm font-medium mb-2">Repository URL {index + 1}</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id={`repository-${index}`}
+                      type="url"
+                      value={url}
+                      onChange={e => setRepoUrls(previous => previous.map((value, i) => i === index ? e.target.value : value))}
+                      className="w-full min-w-0 bg-secondary/30 border border-border/50 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      placeholder="https://github.com/org/repo"
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Remove repository ${index + 1}`}
+                      onClick={() => setRepoUrls(previous => previous.length === 1 ? [''] : previous.filter((_, i) => i !== index))}
+                      className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setRepoUrls(previous => [...previous, ''])}
                 className="bg-secondary text-secondary-foreground px-4 py-2 rounded-xl font-medium text-sm mt-2 hover:bg-secondary/80 transition-colors shadow-sm"
               >
-                Verify Connection
+                Add Repository
               </button>
+              <p className="text-xs text-muted-foreground">Repositories are analyzed when you run the model. Blank rows and duplicate URLs are ignored; failures are listed individually in the report.</p>
             </div>
           </div>
         )}

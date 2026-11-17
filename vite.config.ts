@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => {
   const copilotProxy = {
     "/api/copilot": bridgeTarget,
     "/api/crawl": bridgeTarget,
+    "/api/github": bridgeTarget,
   };
   return {
     server: {

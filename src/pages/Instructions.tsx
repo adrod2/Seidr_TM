@@ -86,8 +86,12 @@ export const Instructions = () => {
             <div>
               <h4 className="text-lg font-semibold mb-1">Link Code Repositories</h4>
               <p className="text-muted-foreground text-sm leading-relaxed">
-                In the <strong>Repositories</strong> tab, you can paste the URL to your GitHub, GitLab, or Bitbucket repository. 
-                This allows the agent to perform a heuristic scan to identify inherent code-level vulnerabilities, dependencies, and configuration risks.
+                In the <strong>Repositories</strong> tab, use <strong>Add Repository</strong> to include multiple repositories in one threat model.
+                Sign in on the local server with <code>gh auth login --hostname github.com --web</code>, then use <strong>Check Connection</strong> and <strong>Browse GitHub Repositories</strong> to select public or private repositories available to that account.
+                Credentials stay on the local server; access follows repository permissions and organization SSO (single sign-on) requirements. This GitHub connection is separate from the Copilot AI login.
+                GitHub repositories are scanned for code-level vulnerabilities, dependencies, and configuration risks; other providers supply URL-based context only.
+                Metadata (description, topics, license, languages, latest release) and text documentation (README, security policies, architecture, API docs, and design decisions) are collected separately and added to the architecture and threat-analysis context, even when no code findings are identified.
+                Long sources are condensed, and the report lists each source, exclusions, collection limits, and individual failures. This is static analysis, not DAST (testing a running application).
               </p>
               <p className="text-muted-foreground text-sm leading-relaxed mt-2">
                 Optionally add a <strong>Reference URL</strong> (product site, docs, or trust center). A web documentation agent spiders up to
@@ -122,6 +126,11 @@ export const Instructions = () => {
           <span className="bg-primary/20 text-primary h-8 w-8 rounded-full flex items-center justify-center text-sm">2</span>
           Navigating the Threat Report
         </h3>
+        <p className="text-sm text-muted-foreground mb-6">
+          Select <strong>Redo Threat Model</strong> in a completed report to open an editable new assessment with its original inputs, files and methodology prefilled.
+          Change the inputs or framework and run again; the original report stays unchanged. Repository and website context is fetched again.
+          Original inputs and attachments are stored locally with new assessments. Older reports can recover only the text they retained and will warn you to reattach missing originals.
+        </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="border border-border/50 rounded-2xl p-5 bg-secondary/10">
