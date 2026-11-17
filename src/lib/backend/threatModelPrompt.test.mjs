@@ -62,3 +62,11 @@ test('reports receive a qualitative exploitation assessment without treating CVS
   assert.match(buildThreatModelPrompt('Hybrid TM', method), /"dread": \{ "damage"/);
   assert.doesNotMatch(buildThreatModelPrompt('STRIDE', method), /"dread"/);
 });
+
+test('threat-map targets use explicit component and flow IDs without guessed routes', () => {
+  const prompt = buildThreatModelPrompt('STRIDE', method);
+  assert.match(prompt, /"affectedComponentIds"/);
+  assert.match(prompt, /"affectedFlowIds"/);
+  assert.match(prompt, /EXACT existing SRG component and edge IDs/);
+  assert.match(prompt, /Do not invent IDs or infer that every adjacent flow is vulnerable/);
+});

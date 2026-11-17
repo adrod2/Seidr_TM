@@ -67,6 +67,24 @@ test('CSV preserves complete long text and neutralizes spreadsheet formulas', ()
   assert.ok(rows[1].some(value => String(value).includes('No separate exploitation-likelihood assessment')));
 });
 
+test('exports retain every explicit component and data-flow target without translating their IDs', () => {
+  const threat = { ...finding('MULTI'), affectedComponentIds: ['API', 'AUTH'], affectedFlowIds: ['e1'] };
+  const report = model([threat]);
+  assert.equal(reportFindings(report)[0].component, 'API container [API]; Authorization service [AUTH]');
+  const csv = buildFindingsCsv(report);
+  assert.match(csv, /Data flows affected/);
+  const workbook = XLSX.read(csv, { type: 'string', raw: true });
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
+  assert.equal(rows[1][rows[0].indexOf('Data flows affected')], 'e1');
+  const payload = structuredClone(reportTranslationPayload(report));
+  payload.threats[0].affectedComponentIds = ['WRONG'];
+  payload.threats[0].affectedFlowIds = ['WRONG'];
+  const translated = mergeReportTranslation(report, payload);
+  assert.deepEqual(translated.threats[0].affectedComponentIds, ['API', 'AUTH']);
+  assert.deepEqual(translated.threats[0].affectedFlowIds, ['e1']);
+  assert.equal(reportFindings(model([{ ...threat, affectedComponentIds: [] }]))[0].component, 'Not recorded');
+});
+
 test('DREAD is independent of CVSS and requires all five valid dimensions for its mean', () => {
   const threat = { ...finding('T-1', 'Critical', 9.8),
     dread: { damage: 4, reproducibility: 5, exploitability: 6, affectedUsers: 7, discoverability: 8, mean: 10 } };

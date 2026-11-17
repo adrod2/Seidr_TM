@@ -1,23 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Filter, AlertTriangle, Server, CheckCircle2, ShieldAlert, ChevronDown, ChevronUp, Search, X, SlidersHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
+import type { Threat } from '@/lib/backend/types';
+import { mitigationActions } from '@/lib/reportExport';
 
-const defaultThreats = [
-  { 
-    id: 'T-001', 
-    title: 'Unauthenticated API Access', 
-    category: 'Spoofing', 
-    componentId: 'API Gateway', 
-    severity: 'Critical', 
-    cvssScore: 9.2,
-    description: 'The API Gateway is exposed to the public internet without proper enforcement of JWT validation on all endpoints, allowing attackers to bypass authentication.',
-    evidence: 'The C4 diagram shows an inbound data flow from "Internet User" to "API Gateway" labeled "HTTPS" but missing trust boundary enforcement and authentication tags.',
-    reasoning: '1. An attacker scans the public IP of the API Gateway.\n2. The attacker crafts direct requests to downstream microservice routes.\n3. Because the gateway does not enforce the auth policy globally, the request is forwarded to the internal subnet, granting unauthorized data access.'
-  }
-];
+const EMPTY_THREATS: Threat[] = [];
 
-export const ThreatCatalogTab = ({ threats, framework = 'STRIDE', selectedThreatId }: { threats?: any[], framework?: string, selectedThreatId?: string | null }) => {
-  const displayThreats = threats && threats.length > 0 ? threats : defaultThreats;
+export const ThreatCatalogTab = ({ threats, framework = 'STRIDE', selectedThreatId }: { threats?: Threat[], framework?: string, selectedThreatId?: string | null }) => {
+  const displayThreats = threats || EMPTY_THREATS;
   
   const [expandedThreats, setExpandedThreats] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
@@ -34,10 +24,7 @@ export const ThreatCatalogTab = ({ threats, framework = 'STRIDE', selectedThreat
   const filteredThreats = useMemo(() => {
     return displayThreats.filter(t => {
       const matchesSearch = !searchQuery || 
-        t.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.componentId.toLowerCase().includes(searchQuery.toLowerCase());
+        [t.title, t.description, t.id, t.componentId].some(value => value?.toLowerCase().includes(searchQuery.toLowerCase()));
         
       const matchesCategory = selectedCategory === 'All Categories' || t.category === selectedCategory;
       const matchesSeverity = selectedSeverity === 'All Severities' || t.severity === selectedSeverity;
@@ -64,25 +51,23 @@ export const ThreatCatalogTab = ({ threats, framework = 'STRIDE', selectedThreat
 
   const hasActiveFilters = searchQuery !== '' || selectedCategory !== 'All Categories' || selectedSeverity !== 'All Severities';
 
-  React.useEffect(() => {
-    if (selectedThreatId) {
-        const element = document.getElementById(`threat-${selectedThreatId}`);
-        if (element) {
-            // Ensure the threat is visible by clearing filters that might hide it
-            clearFilters();
-            // Expand the threat details
-            setExpandedThreats(prev => new Set(prev).add(selectedThreatId));
-
-            setTimeout(() => {
-                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                element.classList.add('ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-background');
-                setTimeout(() => {
-                    element.classList.remove('ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-background');
-                }, 2500);
-            }, 100); // Short delay to allow render after clearing filters
-        }
-    }
+  useEffect(() => {
+    if (!selectedThreatId) return;
+    setSearchQuery('');
+    setSelectedCategory('All Categories');
+    setSelectedSeverity('All Severities');
+    setExpandedThreats(previous => new Set(previous).add(selectedThreatId));
   }, [selectedThreatId]);
+
+  useEffect(() => {
+    if (!selectedThreatId || !expandedThreats.has(selectedThreatId)) return;
+    const frame = requestAnimationFrame(() => {
+      const element = document.getElementById(`threat-${selectedThreatId}`);
+      element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      element?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedThreatId, filteredThreats, expandedThreats]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-secondary/10 h-full">
@@ -158,7 +143,8 @@ export const ThreatCatalogTab = ({ threats, framework = 'STRIDE', selectedThreat
             <Filter className="h-10 w-10 text-muted-foreground mb-3" />
             <h4 className="font-bold text-lg mb-1">No threats found</h4>
             <p className="text-muted-foreground text-sm max-w-md">
-              We couldn't find any threats matching your current filter criteria. Try adjusting your search or clearing the filters.
+              {displayThreats.length ? 'No findings match these filters. Try adjusting your search or clearing the filters.'
+                : 'No findings were recorded. This does not establish that the system is free of threats.'}
             </p>
             <button 
               onClick={clearFilters}
@@ -172,7 +158,8 @@ export const ThreatCatalogTab = ({ threats, framework = 'STRIDE', selectedThreat
             const isExpanded = expandedThreats.has(threat.id);
             
             return (
-              <div key={threat.id} id={`threat-${threat.id}`} className="border border-border/50 rounded-2xl p-5 hover:border-primary/50 transition-colors flex flex-col group bg-card shadow-sm hover:shadow-md">
+              <div key={threat.id} id={`threat-${threat.id}`} tabIndex={-1}
+                className={`border border-border/50 rounded-2xl p-5 hover:border-primary/50 transition-colors flex flex-col group bg-card shadow-sm hover:shadow-md ${selectedThreatId === threat.id ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}>
                 <div className="flex gap-4">
                   <div className={`mt-1 flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${
                     threat.severity === 'Critical' ? 'bg-destructive/10 text-destructive' : 
@@ -198,14 +185,14 @@ export const ThreatCatalogTab = ({ threats, framework = 'STRIDE', selectedThreat
                     </p>
 
                     {/* Expanded Details Section */}
-                    {(threat.evidence || threat.reasoning) && (
                       <div className="mt-3">
                         <button 
                           onClick={() => toggleExpand(threat.id)}
+                          aria-expanded={isExpanded}
                           className="text-xs font-bold text-primary flex items-center gap-1 hover:underline mb-2"
                         >
                           {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                          {isExpanded ? 'Hide Analysis Details' : 'View Architecture Evidence & Reasoning'}
+                          {isExpanded ? 'Hide Analysis Details' : 'View Finding Details'}
                         </button>
                         
                         {isExpanded && (
@@ -213,7 +200,7 @@ export const ThreatCatalogTab = ({ threats, framework = 'STRIDE', selectedThreat
                             {threat.evidence && (
                               <div>
                                 <h5 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1.5">
-                                  <Search className="h-3 w-3" /> Evidence in SRG
+                                  <Search className="h-3 w-3" /> Evidence and Source References
                                 </h5>
                                 <p className="text-sm text-muted-foreground whitespace-pre-line">{threat.evidence}</p>
                               </div>
@@ -226,10 +213,14 @@ export const ThreatCatalogTab = ({ threats, framework = 'STRIDE', selectedThreat
                                 <p className="text-sm text-muted-foreground whitespace-pre-line">{threat.reasoning}</p>
                               </div>
                             )}
+                            {threat.exploitationRisk && <div><h5 className="text-xs font-bold mb-1">Exploitation risk</h5><p className="text-sm text-muted-foreground whitespace-pre-line">{threat.exploitationRisk}</p></div>}
+                            {!!mitigationActions(threat).length && <div><h5 className="text-xs font-bold mb-1">Suggested mitigation</h5>
+                              {mitigationActions(threat).map((action, index) => <p key={index} className="text-sm text-muted-foreground whitespace-pre-line mt-2">{action}</p>)}</div>}
+                            {!!threat.affectedFlowIds?.length && <p className="text-xs text-muted-foreground">Affected data flows: {threat.affectedFlowIds.join(', ')}</p>}
+                            {!threat.evidence && <p className="text-sm text-muted-foreground">No supporting evidence was recorded for this finding.</p>}
                           </div>
                         )}
                       </div>
-                    )}
                   </div>
                 </div>
                 

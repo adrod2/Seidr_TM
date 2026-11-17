@@ -25,6 +25,10 @@ export const Report = () => {
   const [activeTab, setActiveTab] = useState('findings');
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
   const [selectedThreatId, setSelectedThreatId] = useState<string | null>(null);
+  const handleThreatSelect = React.useCallback((threatId: string) => {
+    setSelectedThreatId(threatId);
+    setActiveTab('threats');
+  }, []);
   
   // Export Modal State
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -129,24 +133,6 @@ export const Report = () => {
     }
   };
   
-    const handleThreatSelect = (threatId: string) => {
-      setActiveTab('threats');
-      setSelectedThreatId(threatId);
-      // We set a timeout to allow the tab to switch and the component to render
-      // before we try to scroll to the element.
-      setTimeout(() => {
-          const element = document.getElementById(`threat-${threatId}`);
-          if (element) {
-              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              // Highlight the element briefly
-              element.classList.add('ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-background');
-              setTimeout(() => {
-                  element.classList.remove('ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-background');
-              }, 2000);
-          }
-      }, 100);
-    };
-
   return (
     <>
       <div className="flex flex-col h-[calc(100vh-8rem)] relative print:hidden">
@@ -206,7 +192,7 @@ export const Report = () => {
           <div className="flex-1 flex flex-col min-w-0">
             {activeTab === 'findings' && <FindingsTab threats={modelData.threats} model={modelData} onThreatSelect={handleThreatSelect} />}
             {activeTab === 'threats' && <ThreatCatalogTab threats={modelData.threats} framework={modelData.framework} selectedThreatId={selectedThreatId} />}
-            {activeTab === 'c4' && <C4ArchitectureTab srg={modelData.srg} modelId={modelData.id} />}
+            {activeTab === 'c4' && <C4ArchitectureTab srg={modelData.srg} modelId={modelData.id} threats={modelData.threats} onThreatSelect={handleThreatSelect} />}
             {activeTab === 'mitigations' && <MitigationsTab threats={modelData.threats} modelId={modelData.id} />}
             {activeTab === 'compliance' && <ComplianceTab gaps={modelData.complianceGaps} />}
           </div>

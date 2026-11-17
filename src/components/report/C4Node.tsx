@@ -1,5 +1,9 @@
 import React, { memo } from 'react';
 import { Handle, Position, NodeProps, EdgeProps, EdgeLabelRenderer, BaseEdge, getSmoothStepPath } from '@xyflow/react';
+import { ArrowUpRight, ShieldAlert } from 'lucide-react';
+import type { Threat } from '@/lib/backend/types';
+import { THREAT_COLORS, threatColor } from '@/lib/threatMap';
+import type { routeDiagramEdge } from '@/lib/c4Routes';
 
 export const C4_NODE_WIDTH = 250;
 
@@ -19,17 +23,24 @@ export interface C4NodeData extends Record<string, unknown> {
   technology?: string;
   description?: string;
   componentId: string;
+  threats?: Threat[];
+  onInspect?: () => void;
 }
 
 const SIDES = [Position.Top, Position.Right, Position.Bottom, Position.Left];
 const handleClass = '!w-2 !h-2 !min-w-0 !min-h-0 !border-0 !bg-slate-500/70 opacity-0 group-hover:opacity-100 transition-opacity';
 
-const Handles = () => (
+const Handles = ({ threats = [] }: { threats?: Threat[] }) => (
   <>
     {SIDES.map((side) => (
       <React.Fragment key={side}>
         <Handle type="target" id={`${side}-t`} position={side} className={handleClass} />
         <Handle type="source" id={`${side}-s`} position={side} className={handleClass} />
+        {threats.map((threat, index) => <Handle key={threat.id} type="target"
+          id={`${side}-threat-${encodeURIComponent(threat.id)}`} position={side} className={handleClass}
+          style={side === Position.Top || side === Position.Bottom
+            ? { left: `${100 * (index + 1) / (threats.length + 1)}%` }
+            : { top: `${100 * (index + 1) / (threats.length + 1)}%` }} />)}
       </React.Fragment>
     ))}
   </>
@@ -54,6 +65,13 @@ const Body = ({ data, color }: { data: C4NodeData; color: string }) => (
       <div className="text-[11px] leading-snug opacity-90 mt-1 line-clamp-4" title={data.description}>{data.description}</div>
     )}
     <div className="text-[9px] font-mono tracking-wider opacity-60 mt-1 uppercase">{data.componentId}</div>
+    {!!data.threats?.length && (
+      <button type="button" className="nodrag nopan mt-2 rounded-md bg-black/25 px-2 py-1 text-[11px] font-semibold text-white flex items-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        onClick={event => { event.stopPropagation(); data.onInspect?.(); }}
+        aria-label={`Inspect ${data.threats.length} threats affecting ${data.label}`}>
+        <ShieldAlert className="h-3.5 w-3.5" /> {data.threats.length} {data.threats.length === 1 ? 'threat' : 'threats'}
+      </button>
+    )}
   </div>
 );
 
@@ -70,7 +88,7 @@ export const C4Node = memo(({ data, selected }: NodeProps) => {
         <div className="w-full px-4 pt-7 pb-4" style={{ background: palette.fill, border: `2px solid ${palette.stroke}`, borderRadius: 28, boxShadow: shadow }}>
           <Body data={d} color={palette.text} />
         </div>
-        <Handles />
+        <Handles threats={d.threats} />
       </div>
     );
   }
@@ -82,7 +100,7 @@ export const C4Node = memo(({ data, selected }: NodeProps) => {
           <div className="absolute left-[-2px] right-[-2px] top-[-2px] h-[44px] pointer-events-none" style={{ border: `2px solid ${palette.stroke}`, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
           <Body data={d} color={palette.text} />
         </div>
-        <Handles />
+        <Handles threats={d.threats} />
       </div>
     );
   }
@@ -94,7 +112,7 @@ export const C4Node = memo(({ data, selected }: NodeProps) => {
       borderStyle: d.external && d.c4Type !== 'System' ? 'dashed' : 'solid',
     }}>
       <Body data={d} color={palette.text} />
-      <Handles />
+      <Handles threats={d.threats} />
     </div>
   );
 });
@@ -116,20 +134,70 @@ export const C4BoundaryNode = memo(({ data }: NodeProps) => {
 });
 C4BoundaryNode.displayName = 'C4BoundaryNode';
 
+export interface C4ThreatData extends Record<string, unknown> {
+  threat: Threat;
+  onOpen: (id: string) => void;
+}
+
+export const C4ThreatNode = memo(({ data }: NodeProps) => {
+  const { threat, onOpen } = data as C4ThreatData;
+  const color = THREAT_COLORS[threat.severity] || THREAT_COLORS.Unrated;
+  return (
+    <div className="relative w-[220px] h-[124px]">
+      <button type="button" className="nodrag nopan w-full h-full rounded-xl border-l-4 bg-card p-3 text-left shadow-md border border-border focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+        style={{ borderLeftColor: color }} onClick={() => onOpen(threat.id)}
+        aria-label={`Open threat ${threat.id}: ${threat.title}`}>
+        <span className="flex items-center justify-between gap-2 text-[10px] font-bold" style={{ color }}>
+          <span className="flex items-center gap-1"><ShieldAlert className="h-3.5 w-3.5" /> {threat.severity || 'Unrated'}</span>
+          <ArrowUpRight className="h-3.5 w-3.5" />
+        </span>
+        <span className="block mt-1 text-[10px] font-mono text-muted-foreground truncate" title={threat.id}>{threat.id}</span>
+        <span className="block mt-1 text-xs font-semibold text-foreground line-clamp-2" title={threat.title}>{threat.title}</span>
+      </button>
+      <Handles />
+    </div>
+  );
+});
+C4ThreatNode.displayName = 'C4ThreatNode';
+
+export interface C4EdgeData extends Record<string, unknown> {
+  label?: string;
+  protocol?: string;
+  threats?: Threat[];
+  annotation?: boolean;
+  onOpen?: (id: string) => void;
+  route?: ReturnType<typeof routeDiagramEdge>;
+  blocked?: boolean;
+}
+
 export const C4Edge = memo(({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, data, selected }: EdgeProps) => {
-  const [path, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 14, offset: 24 });
-  const d = (data || {}) as { label?: string; protocol?: string };
+  const [fallbackPath, fallbackX, fallbackY] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 14, offset: 24 });
+  const d = (data || {}) as C4EdgeData;
+  const path = d.route?.path || fallbackPath;
+  const labelX = d.route?.labelX ?? fallbackX, labelY = d.route?.labelY ?? fallbackY;
+  const color = d.threats?.length ? threatColor(d.threats) : '#64748b';
   return (
     <>
-      <BaseEdge id={id} path={path} markerEnd={markerEnd} style={{
-        stroke: selected ? '#f59e0b' : '#64748b', strokeWidth: selected ? 2.25 : 1.5, strokeDasharray: '6 4',
+      <BaseEdge id={id} path={path} markerEnd={markerEnd} interactionWidth={28} style={{
+        stroke: selected ? '#f59e0b' : color, strokeWidth: d.threats?.length ? 2.5 : 1.5,
+        strokeDasharray: d.annotation ? '6 4' : undefined,
       }} />
-      {(d.label || d.protocol) && (
+      {(d.label || d.protocol || !!d.threats?.length) && (
         <EdgeLabelRenderer>
-          <div className="nodrag nopan absolute pointer-events-auto bg-card/95 border border-border/60 rounded-md px-2 py-1 text-center shadow-sm max-w-[180px]"
+          <div className="nodrag nopan nowheel absolute pointer-events-auto bg-card/95 border border-border/60 rounded-md px-2 py-1 text-center shadow-sm max-w-[190px] max-h-32 overflow-y-auto"
             style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}>
             {d.label && <div className="text-[10.5px] font-medium leading-tight text-foreground">{d.label}</div>}
             {d.protocol && <div className="text-[9.5px] text-muted-foreground leading-tight">[{d.protocol}]</div>}
+            {d.blocked && <div className="text-[9px] text-amber-600">Route obstructed: use Auto Layout</div>}
+            {d.threats?.map(threat => (
+              <button type="button" key={threat.id} className="block w-full text-left text-[10px] font-bold rounded px-1 py-1 hover:bg-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                style={{ color: THREAT_COLORS[threat.severity] || THREAT_COLORS.Unrated }}
+                aria-label={`Open ${d.annotation ? 'component' : 'flow'} threat ${threat.id}: ${threat.title}`}
+                title={`${threat.severity}: ${threat.title}`}
+                onClick={event => { event.stopPropagation(); d.onOpen?.(threat.id); }}>
+                <span className="inline-flex items-center gap-1"><ShieldAlert className="h-3 w-3 shrink-0" /> {threat.id} · {threat.severity}</span>
+              </button>
+            ))}
           </div>
         </EdgeLabelRenderer>
       )}

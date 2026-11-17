@@ -125,6 +125,7 @@ export const PrintReport = ({ modelData, diagramSvg = '' }: { modelData: ExportR
               <div><dt>{t.framework}</dt><dd>{modelData.framework || t.notRecorded}</dd></div>
               <div><dt>{t.category}</dt><dd>{threat.category || t.notRecorded}</dd></div>
               <div><dt>{t.component}</dt><dd>{component}</dd></div>
+              {!!threat.affectedFlowIds?.length && <div><dt>{t.affectedFlows}</dt><dd>{threat.affectedFlowIds.join(', ')}</dd></div>}
               <div><dt>{t.treatmentStatus}</dt><dd>{threat.status || t.notRecorded}</dd></div>
             </dl>
             <Field label={t.description} value={threat.description} missing={t.notRecorded} />

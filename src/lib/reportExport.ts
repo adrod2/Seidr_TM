@@ -30,6 +30,7 @@ export const REPORT_STRINGS = {
   cvss: 'CVSS estimate',
   category: 'Framework categories',
   component: 'Components affected',
+  affectedFlows: 'Data flows affected',
   critical: 'Critical',
   high: 'High',
   medium: 'Medium',
@@ -113,6 +114,12 @@ export function mitigationActions(threat: Threat): string[] {
 }
 
 export function affectedComponent(threat: Threat, srg: SystemRepresentationGraph, missing: string): string {
+  if (Array.isArray(threat.affectedComponentIds)) {
+    return [...new Set(threat.affectedComponentIds)].map(id => {
+      const component = srg?.components?.find(component => component.id === id);
+      return component ? `${component.name} [${component.id}]` : `${id} (unresolved reference)`;
+    }).join('; ') || missing;
+  }
   const value = threat.componentId?.trim();
   if (!value) return missing;
   const component = srg?.components?.find(c => c.id.toLowerCase() === value.toLowerCase() || c.name.toLowerCase() === value.toLowerCase());
@@ -172,12 +179,12 @@ export async function renderReportDiagram(model: ExportReport): Promise<string> 
 
 export function buildFindingsCsv(model: ExportReport): string {
   const t = reportStrings(model);
-  const headers = [t.priority, t.findingId, t.title, t.severity, `${t.cvss} / 10`, t.framework, t.category, t.component,
+  const headers = [t.priority, t.findingId, t.title, t.severity, `${t.cvss} / 10`, t.framework, t.category, t.component, t.affectedFlows,
     t.description, t.evidence, t.exploitationPath, t.suggestedMitigation, t.exploitationRisk,
     ...DREAD_DIMENSIONS.map(key => `DREAD: ${t[key]} / 10`), `${t.dreadMean} / 10`, t.treatmentStatus, t.justification];
   const rows = reportFindings(model).map(({ threat, priority, component, mitigations }) => [
     priority, threat.id, threat.title, t[severityKey(threat.severity)], scoreLabel(threat.cvssScore, t.notRecorded),
-    model.framework, threat.category, component, threat.description, threat.evidence, threat.reasoning,
+    model.framework, threat.category, component, (threat.affectedFlowIds || []).join('; ') || t.notRecorded, threat.description, threat.evidence, threat.reasoning,
     mitigations.join('\n\n') || t.noMitigation, threat.exploitationRisk || t.missingRisk,
     ...DREAD_DIMENSIONS.map(key => validScore(threat.dread?.[key], 1) ? threat.dread[key] : t.notRecorded),
     scoreLabel(dreadMean(threat), t.notRecorded), threat.status, threat.justification,

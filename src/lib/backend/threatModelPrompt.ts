@@ -24,6 +24,7 @@ You MUST review EVERY section and every source within it. Threats must reflect f
 Repository metadata and documentation are independent context sources, not just code-findings evidence. Analyze their stated architecture, data handling, trust boundaries, business purpose, security/privacy controls and assumptions even when the static code-analysis stream has no findings or has failed. Distinguish documented claims from verified implementation; do not treat absent documentation as proof of a vulnerability or claim that live DAST was performed.
 In the "evidence" field, name the source(s) the evidence comes from (e.g. "Document: Answers.pdf [Page 3]", "Diagram: network.png", "Website", "System description").
 Identify potential threats in deep detail by correlating the architecture with the provided context.
+Map findings to the graph using "affectedComponentIds" and "affectedFlowIds" arrays of EXACT existing SRG component and edge IDs. Include all evidenced affected targets, and use empty arrays where no target is established. Do not invent IDs or infer that every adjacent flow is vulnerable. Keep "componentId" as the primary affected component ID for compatibility.
 
 Return ONLY a valid JSON array of objects with this EXACT structure:
 [
@@ -36,6 +37,8 @@ Return ONLY a valid JSON array of objects with this EXACT structure:
     "exploitationRisk": "string (qualitative assessment of required access, attack prerequisites, relevant controls, uncertainty and potential impact; distinguish modeled risk from verified exploitation, and do not invent a probability)",
     "category": "string (the threat category according to the ${framework} framework)",
     "componentId": "string (name of the vulnerable component from the SRG id or name)",
+    "affectedComponentIds": ["exact SRG component ID, or empty array if unknown"],
+    "affectedFlowIds": ["exact SRG edge ID, or empty array if no affected flow is established"],
     "cvssScore": 8.5,
     "severity": "Critical" | "High" | "Medium" | "Low"${framework === 'Hybrid TM' ? `,
     "dread": { "damage": 8, "reproducibility": 7, "exploitability": 6, "affectedUsers": 8, "discoverability": 7 }` : ''}

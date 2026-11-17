@@ -148,8 +148,9 @@ export const Instructions = () => {
             <p className="text-sm text-muted-foreground leading-relaxed">
               An interactive representation of your system's components and data flows. You can toggle between Context (L1), 
               Container (L2), and Component (L3) views drawn with standard C4 notation. <strong>Auto Layout</strong> cycles through six
-              non-overlapping arrangements (layered, tiered, radial, organic, grid), and the <strong>Mermaid</strong> view renders a
-              publication-ready diagram you can export as SVG or PNG. Double-click a node to edit it.
+              non-overlapping arrangements (layered, tiered, radial, organic, grid). Severity-labelled threat arrows and affected data-flow
+              routes open the associated finding details. Select a component or flow to inspect all linked threats, filter by severity,
+              or use Locate to find a target across levels. Unmapped findings remain visible in the explorer. Double-click a node to edit it.
             </p>
           </div>
 

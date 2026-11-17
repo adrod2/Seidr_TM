@@ -7,7 +7,12 @@ export interface SRGComponent {
   description: string;
   technology?: string;
   external?: boolean;
-  metadata?: Record<string, any>;
+  metadata?: {
+    [key: string]: unknown;
+    technology?: string;
+    position?: { x: number; y: number };
+    positions?: Record<string, { x: number; y: number }>;
+  };
 }
 
 export interface SRGEdge {
@@ -31,6 +36,8 @@ export interface Threat {
   description: string;
   category: string;
   componentId: string;
+  affectedComponentIds?: string[];
+  affectedFlowIds?: string[];
   cvssScore: number;
   severity: 'Critical' | 'High' | 'Medium' | 'Low';
   mitigations?: string[];
