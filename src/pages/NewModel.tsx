@@ -95,13 +95,16 @@ export const NewModel = () => {
   const [loadingRedo, setLoadingRedo] = useState(Boolean(redoId));
   const [redoError, setRedoError] = useState('');
   const [redoWarnings, setRedoWarnings] = useState<string[]>([]);
-  const [additionalInputs, setAdditionalInputs] = useState<Pick<AnalysisPayload, 'questionnaire' | 'documentation' | 'systemId' | 'parentAssessmentId' | 'environment' | 'systemVersion' | 'scope'>>({});
+  const [copyAsNewSystem, setCopyAsNewSystem] = useState(false);
+  const [failedModelId, setFailedModelId] = useState('');
+  const [additionalInputs, setAdditionalInputs] = useState<Pick<AnalysisPayload, 'questionnaire' | 'documentation' | 'systemId' | 'parentAssessmentId' | 'parentAssessmentRevision' | 'environment' | 'systemVersion' | 'scope'>>({});
 
   useEffect(() => {
     let active = true;
     setLoadingRedo(Boolean(redoId));
     setRedoError('');
     setRedoWarnings([]);
+    setCopyAsNewSystem(false); setFailedModelId('');
     setModelName('');
     setDescription('');
     setSelectedFramework('STRIDE');
@@ -127,7 +130,7 @@ export const NewModel = () => {
         setRepoUrls(payload.repositoryUrls?.length ? [...payload.repositoryUrls] : payload.repositoryUrl ? [payload.repositoryUrl] : ['']);
         setSourceUrl(payload.sourceUrl || '');
         setAdditionalInputs({ questionnaire: payload.questionnaire, documentation: payload.documentation,
-          systemId: payload.systemId, parentAssessmentId: payload.parentAssessmentId,
+          systemId: payload.systemId, parentAssessmentId: payload.parentAssessmentId, parentAssessmentRevision: payload.parentAssessmentRevision,
           environment: payload.environment, systemVersion: payload.systemVersion, scope: payload.scope });
         setUploadedDocs((payload.documents || []).map((doc, index) => ({
           ...restoreInputFile(payload.inputFiles?.documents[index], doc.name, doc.text), result: doc, isExtracting: false,
@@ -307,6 +310,9 @@ export const NewModel = () => {
     const result = await startAnalysisPipeline(
       {
         ...additionalInputs,
+        systemId: copyAsNewSystem ? undefined : additionalInputs.systemId,
+        parentAssessmentId: copyAsNewSystem ? undefined : additionalInputs.parentAssessmentId,
+        parentAssessmentRevision: copyAsNewSystem ? undefined : additionalInputs.parentAssessmentRevision,
         name: modelName,
         description: payloadDesc,
         frameworks: [selectedFramework],
@@ -334,6 +340,7 @@ export const NewModel = () => {
       setTimeout(() => navigate(`/models/${result.modelId}`), 800);
     } else {
       toast.error(`Analysis failed: ${result.error}`);
+      setFailedModelId(result.modelId || '');
       setIsAnalyzing(false);
     }
   };
@@ -411,8 +418,16 @@ export const NewModel = () => {
         <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm space-y-1">
           <p>Editing a copy. Change any inputs or methodology, then run a new analysis. The original model is unchanged; repository and website data will be fetched again.</p>
           {redoWarnings.map(warning => <p key={warning} className="text-amber-600 dark:text-amber-400">{warning}</p>)}
+          <label className="block"><input type="checkbox" checked={copyAsNewSystem} onChange={event => setCopyAsNewSystem(event.target.checked)} /> Copy into a genuinely different system (new identity; no automatic scenario lineage)</label>
         </div>
       )}
+      {failedModelId && <p role="alert" className="mb-3 text-sm text-destructive">Analysis incomplete. Original inputs were retained. <Link className="underline" to={`/models/${failedModelId}`}>Open the incomplete assessment and redo it</Link>.</p>}
+      <div className="grid gap-3 md:grid-cols-3 mb-4 text-sm">
+        {(['scope', 'environment', 'systemVersion'] as const).map(key => <label key={key} className="space-y-1">
+          <span>{key === 'systemVersion' ? 'Deployment / system version' : key === 'scope' ? 'Assessment scope and exclusions' : 'Environment'}</span>
+          <input className="w-full rounded-lg border border-border bg-background p-2" value={additionalInputs[key] || ''} placeholder="Unknown until supplied and reviewed"
+            onChange={event => setAdditionalInputs(previous => ({ ...previous, [key]: event.target.value }))} /></label>)}
+      </div>
       <div className="flex items-center justify-between mb-6">
         <div className="flex-1 max-w-md">
           <input 

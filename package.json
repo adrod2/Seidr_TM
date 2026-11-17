@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "copilot:server": "node --env-file-if-exists=.env src/server/copilotServer.mjs",
-    "test": "node --test src/server/copilotServer.test.mjs src/server/crawler.test.mjs src/server/github.test.mjs src/lib/c4Layout.test.mjs src/lib/c4Routes.test.mjs src/lib/c4Model.test.mjs src/lib/threatMap.test.mjs src/lib/reportExport.test.mjs src/lib/assessmentExport.test.mjs src/lib/backend/assessmentQuality.test.mjs src/lib/backend/analysisContext.test.mjs src/lib/backend/documentContext.test.mjs src/lib/backend/threatModelPrompt.test.mjs src/lib/backend/asyncUtils.test.mjs src/lib/backend/inputUtils.test.mjs src/lib/backend/agentCache.test.mjs src/lib/backend/repositoryInputs.test.mjs src/lib/backend/githubScanner.test.mjs src/lib/backend/modelInputs.test.mjs",
+    "test": "node --test src/server/copilotServer.test.mjs src/server/crawler.test.mjs src/server/github.test.mjs src/lib/c4Layout.test.mjs src/lib/c4Routes.test.mjs src/lib/c4Model.test.mjs src/lib/threatMap.test.mjs src/lib/reportExport.test.mjs src/lib/assessmentExport.test.mjs src/lib/backend/assessmentQuality.test.mjs src/lib/backend/assessmentWorkflow.test.mjs src/lib/backend/assessmentEvaluation.test.mjs src/lib/backend/analysisContext.test.mjs src/lib/backend/documentContext.test.mjs src/lib/backend/threatModelPrompt.test.mjs src/lib/backend/asyncUtils.test.mjs src/lib/backend/inputUtils.test.mjs src/lib/backend/agentCache.test.mjs src/lib/backend/repositoryInputs.test.mjs src/lib/backend/githubScanner.test.mjs src/lib/backend/modelInputs.test.mjs",
     "test:copilot": "node --test src/server/copilotServer.test.mjs src/server/crawler.test.mjs",
     "build": "vite build",
     "schema:assessment": "node scripts/generate-assessment-schema.mjs",

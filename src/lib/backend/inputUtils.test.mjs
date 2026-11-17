@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { z } from 'zod';
 import { extractDocument } from './documentExtractor.ts';
 import { getErrorMessage, hashImageInput, looksBinaryDocument, readAsDataUrl } from './inputUtils.ts';
 
@@ -64,4 +65,11 @@ test('thrown non-Error values remain visible in ingestion errors', () => {
   assert.equal(getErrorMessage(new Error('read failed')), 'read failed');
   assert.equal(getErrorMessage('provider unavailable'), 'provider unavailable');
   assert.equal(getErrorMessage(null), 'Unknown error');
+});
+
+test('validation failures retain field reasons without raw diagnostic JSON in reports', () => {
+  const result = z.object({ actions: z.array(z.object({ acceptanceTest: z.string().min(1) })) }).safeParse({ actions: [{ acceptanceTest: '' }] });
+  assert.equal(result.success, false);
+  assert.match(getErrorMessage(result.error), /^actions\.0\.acceptanceTest: /);
+  assert.ok(!getErrorMessage(result.error).includes('"code"'));
 });

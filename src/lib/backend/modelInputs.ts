@@ -19,6 +19,7 @@ export interface AnalysisPayload {
   name: string;
   systemId?: string;
   parentAssessmentId?: string;
+  parentAssessmentRevision?: number;
   environment?: string;
   systemVersion?: string;
   scope?: string;
@@ -102,6 +103,7 @@ export function getRedoInputs(model: ThreatModel, saved?: ModelInputs): { payloa
     const payload = structuredClone(saved.payload);
     payload.systemId = model.quality?.systemId || payload.systemId || `legacy:${model.id}`;
     payload.parentAssessmentId = model.id;
+    payload.parentAssessmentRevision = model.quality?.revision || 0;
     payload.environment = model.quality?.environment ?? payload.environment;
     payload.systemVersion = model.quality?.systemVersion ?? payload.systemVersion;
     payload.scope = model.quality?.scope ?? payload.scope;
@@ -138,7 +140,7 @@ export function getRedoInputs(model: ThreatModel, saved?: ModelInputs): { payloa
   return {
     payload: {
       name: model.name, description, userDescription: description, frameworks: [model.framework || 'STRIDE'],
-      systemId: model.quality?.systemId || `legacy:${model.id}`, parentAssessmentId: model.id,
+      systemId: model.quality?.systemId || `legacy:${model.id}`, parentAssessmentId: model.id, parentAssessmentRevision: model.quality?.revision || 0,
       repositoryUrls: [...repositories], sourceUrl: meta?.sourceUrl,
       documents, localDocuments: [...documentNames],
       diagrams: diagramNames.map(name => {

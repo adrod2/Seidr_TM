@@ -185,6 +185,9 @@ export const Instructions = () => {
               You can select a target language (e.g., Spanish, German) before export. Identifiers, scores, framework categories and architecture remain unchanged.
               Structured evidence/decision records preserve original wording and currently English labels. New JSON exports include a versioned decision register and source manifest, not full source text or original files.
               Save review drafts before exporting. Missing information in older assessments is explicitly marked rather than invented. Approvals and proof are local self-attestations, not independent verification.
+              The application recommendation is separate from the owner&apos;s Go, Conditional go or Hold; conditional go has pending owned gates, not unconditional launch clearance. Coverage proposals are not examined coverage. Resolve material conflicting claims with located sources and retained proof.
+              Retry missing treatment without overwriting edited plans; cancellation stops pending calls while active calls finish. Incomplete runs retain original inputs for Redo. Human merge/split and lifecycle changes retain prior revisions and invalidate affected decisions; missing reassessment findings are not automatically resolved.
+              Administration &gt; Data Management provides private backup/recovery including original files, sources and history, but no credentials or agent caches. Backups are sensitive, unencrypted, limited to 256 MiB, and restored atomically without overwriting conflicting IDs. Regular PDF/CSV/JSON reports are not backups.
             </p>
           </div>
         </div>

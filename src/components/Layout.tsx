@@ -188,7 +188,7 @@ const Header = () => {
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                           'text-muted-foreground bg-secondary'
                         }`}>
-                          {model.quality ? assessmentSummary(model.quality).highest : `Legacy / unverified: ${model.riskScore}`}
+                          {model.quality ? assessmentSummary(model.quality).label : `Legacy / unverified: ${model.riskScore}`}
                         </span>
                       </div>
                     </button>

@@ -17,10 +17,11 @@ import { CopilotSidebar } from '@/components/report/CopilotSidebar';
 import { PrintReport } from '@/components/report/PrintReport';
 import { TabButton } from '@/components/TabButton';
 import { agentTranslateReport } from '@/lib/backend/agents';
-import { buildAssessmentExport, buildFindingsCsv, prioritizeThreats, renderReportDiagram, type ExportReport } from '@/lib/reportExport';
+import { buildAssessmentExport, buildFindingsCsv, prioritizeThreats, renderReportDiagram, reportFindings, type ExportReport } from '@/lib/reportExport';
 import { getErrorMessage } from '@/lib/backend/inputUtils';
 import { AssessmentReview } from '@/components/report/AssessmentReview';
 import { assessmentSummary } from '@/lib/backend/assessmentQuality';
+import { recordedDecisionLabel } from '@/lib/backend/assessmentWorkflow';
 
 export const Report = () => {
   const { id } = useParams();
@@ -77,7 +78,7 @@ export const Report = () => {
   };
 
   const riskBadge = modelData.quality
-    ? { label: assessmentSummary(modelData.quality).highest, color: 'text-primary bg-primary/10 border-primary/20' }
+    ? { label: assessmentSummary(modelData.quality).label, color: 'text-primary bg-primary/10 border-primary/20' }
     : getRiskLevel(modelData.riskScore);
   const formattedDate = new Date(modelData.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
@@ -164,6 +165,10 @@ export const Report = () => {
               Model ID: <span className="font-mono text-xs bg-secondary/50 px-1.5 py-0.5 rounded border border-border/50">{modelData.id}</span>
               <span className="px-1">•</span> Generated: {formattedDate}
             </p>
+            <p className="text-sm mt-1">{recordedDecisionLabel(modelData.quality)}</p>
+            {modelData.quality?.run && modelData.quality.run.state !== 'Ready for review' && <p role="alert" className="text-sm text-destructive mt-2">
+              Analysis incomplete / possibly interrupted at stage {modelData.quality.run.stage}. {modelData.quality.run.error} Original inputs are retained; use Redo Threat Model to start a fresh run. This record does not indicate an active background job.
+            </p>}
           </div>
           <div className="flex gap-3 relative flex-wrap justify-end">
             <Link to={`/models/new?redo=${encodeURIComponent(modelData.id)}`}
@@ -211,7 +216,7 @@ export const Report = () => {
         <div className="bg-card border border-border/50 rounded-3xl shadow-sm flex-1 mt-4 overflow-hidden flex">
           <div className="flex-1 flex flex-col min-w-0">
             {activeTab === 'findings' && <FindingsTab threats={modelData.threats} model={modelData} onThreatSelect={handleThreatSelect} />}
-            {activeTab === 'threats' && <ThreatCatalogTab threats={modelData.threats} framework={modelData.framework} selectedThreatId={selectedThreatId}
+            {activeTab === 'threats' && <ThreatCatalogTab threats={reportFindings(modelData).map(finding => finding.threat)} framework={modelData.framework} selectedThreatId={selectedThreatId}
               onReview={modelData.quality ? threatId => { setSelectedThreatId(threatId); setActiveTab('review'); } : undefined} />}
             {activeTab === 'c4' && <C4ArchitectureTab srg={modelData.srg} modelId={modelData.id} threats={modelData.threats} onThreatSelect={handleThreatSelect} />}
             {activeTab === 'mitigations' && (modelData.quality

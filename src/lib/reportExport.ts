@@ -1,7 +1,8 @@
 import type { ThreatModel } from './db';
 import type { ComplianceGap, SystemRepresentationGraph, Threat } from './backend/types';
 import { buildC4Mermaid, systemName, toC4Element, visibleComponents, visibleRelations } from './c4Model.ts';
-import { assessmentExportSchema, rateRisk, type EvidenceSource } from './backend/assessmentQuality.ts';
+import { assessmentExportSchema, qualitySchema, rateRisk, type EvidenceSource } from './backend/assessmentQuality.ts';
+import { assessmentReadiness } from './backend/assessmentWorkflow.ts';
 
 export interface ExportReport extends ThreatModel {
   threats: Threat[];
@@ -14,6 +15,7 @@ export interface ExportReport extends ThreatModel {
 export const REPORT_STRINGS = {
   reportTitle: 'Threat Model Report',
   reportSubtitle: 'Security and privacy risk assessment',
+  qualityLanguageNote: 'The evidence and decision appendix retains original record language and exact state/identifier terminology. Translated summaries are reading aids, not newly approved decisions or translated source quotations.',
   systemName: 'System name',
   modelId: 'Assessment ID',
   dateGenerated: 'Assessment date',
@@ -145,11 +147,15 @@ export function reportOverview(model: ExportReport): string {
 
 export function reportFindings(model: ExportReport) {
   const t = reportStrings(model);
-  return prioritizeThreats(model.threats).map((threat, index) => ({
+  const risks = new Map((model.quality?.risks || []).map(risk => [risk.id, risk]));
+  return prioritizeThreats(model.threats).map((original, index) => {
+    const risk = risks.get(original.id);
+    const threat = risk?.treatmentNarrative ? { ...original, mitigation: risk.treatmentNarrative, mitigations: [] } : original;
+    return {
     threat, priority: index + 1, anchor: `report-finding-${index + 1}`,
     component: affectedComponent(threat, model.srg, t.notRecorded),
     mitigations: mitigationActions(threat),
-  }));
+  }; });
 }
 
 export function reportArchitecture(srg: SystemRepresentationGraph) {
@@ -188,8 +194,12 @@ export function buildFindingsCsv(model: ExportReport): string {
       'Current business risk', 'Current likelihood / 5', 'Current impact / 5', 'Current rationale', 'Inherent business risk',
       'Conditional target business risk', 'Framework lenses', 'Located evidence', 'Recorded controls', 'Verification requests',
       'Actions and tests', 'Owner decision', 'Rubric', 'System ID', 'Assessment revision', 'Scope', 'Environment', 'System version',
-      'Evidence cutoff', 'Collection and stage limitations', 'Source manifest'] : [])];
+      'Evidence cutoff', 'Collection and stage limitations', 'Source manifest', 'Owner system decision', 'Application recommendation',
+      'Decision-impact checks', 'Coverage inventory and proposals', 'Material conflicts', 'Sourced requirements', 'Generation provenance',
+      'Run status', 'Treatment generation state', 'Treatment narrative', 'CVSS version', 'CVSS vector', 'CVSS rationale'] : [])];
   const findings = reportFindings(model);
+  const quality = model.quality ? qualitySchema.parse(model.quality) : undefined;
+  const readiness = quality ? assessmentReadiness(quality) : undefined;
   const rows = findings.map(({ threat, priority, component, mitigations }) => [
     priority, threat.id, threat.title, t[severityKey(threat.severity)], scoreLabel(threat.cvssScore, t.notRecorded),
     model.framework, threat.category, component, (threat.affectedFlowIds || []).join('; ') || t.notRecorded, threat.description, threat.evidence, threat.reasoning,
@@ -197,8 +207,7 @@ export function buildFindingsCsv(model: ExportReport): string {
     ...DREAD_DIMENSIONS.map(key => validScore(threat.dread?.[key], 1) ? threat.dread[key] : t.notRecorded),
     scoreLabel(dreadMean(threat), t.notRecorded), threat.status, threat.justification,
   ]);
-  if (model.quality) rows.forEach((row, index) => {
-    const quality = model.quality!;
+  if (quality) rows.forEach((row, index) => {
     const risk = quality.risks.find(risk => risk.id === findings[index].threat.id);
     if (!risk) throw new Error('A finding is missing its canonical risk record.');
     row.push(risk.evidenceStatus, risk.confidence.level, risk.confidence.reason, risk.owner, risk.disposition,
@@ -207,7 +216,11 @@ export function buildFindingsCsv(model: ExportReport): string {
       JSON.stringify(risk.references), JSON.stringify(risk.controls), JSON.stringify(risk.missingEvidence),
       JSON.stringify(risk.actions), JSON.stringify(risk.decision), quality.rubric.version, quality.systemId,
       quality.revision, quality.scope, quality.environment, quality.systemVersion, quality.evidenceCutoff,
-      quality.stageIssues.join('\n'), JSON.stringify(model.evidenceManifest || []));
+      quality.stageIssues.join('\n'), JSON.stringify(model.evidenceManifest || []), JSON.stringify(quality.releaseDecision),
+      readiness!.recommendation, readiness!.reasons.join('\n'),
+      JSON.stringify(quality.coverage), JSON.stringify(quality.conflicts), JSON.stringify(quality.requirements), JSON.stringify(quality.generation),
+      JSON.stringify(quality.run), risk.treatmentState, risk.treatmentNarrative,
+      findings[index].threat.cvssVersion || 'Not recorded', findings[index].threat.cvssVector || 'Not recorded', findings[index].threat.cvssRationale || 'Not recorded');
   });
   const escape = (value: unknown) => {
     const text = value == null ? '' : String(value);

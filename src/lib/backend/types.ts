@@ -55,6 +55,10 @@ export interface Threat {
   status?: string;
   justification?: string;
   qualityProposal?: import('./assessmentQuality').RiskProposal;
+  analysisOrigin?: 'Architecture' | 'Repository' | 'Specialist';
+  cvssVersion?: string;
+  cvssVector?: string;
+  cvssRationale?: string;
 }
 
 export interface ComplianceGap {
@@ -108,4 +112,4 @@ export interface DescriptionSummary {
 
 export type AnalysisResult =
   | { success: true; modelId: string }
-  | { success: false; error: string };
+  | { success: false; error: string; modelId?: string };

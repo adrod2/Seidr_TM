@@ -4,6 +4,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { Loader2 } from 'lucide-react';
 import { db, type ThreatModel } from '@/lib/db';
 import { assessmentSummary } from '@/lib/backend/assessmentQuality';
+import { assessmentReadiness, recordedDecisionLabel } from '@/lib/backend/assessmentWorkflow';
 
 export const Dashboard = () => {
   const models = useLiveQuery(() => db.threatModels.toArray());
@@ -28,6 +29,8 @@ export const Dashboard = () => {
     }
     return {
       systems: latest.length, legacy: latest.filter(model => !model.quality).length,
+      hold: latest.filter(model => model.quality && assessmentReadiness(model.quality).recommendation === 'Hold').length,
+      decisions: latest.filter(model => model.quality && !['Review required', 'Legacy / unverified'].includes(recordedDecisionLabel(model.quality))).length,
       blockers: summaries.reduce((sum, item) => sum + item.blockers, 0),
       unrated: summaries.reduce((sum, item) => sum + item.unrated, 0),
       accepted: summaries.reduce((sum, item) => sum + item.accepted, 0),
@@ -44,6 +47,7 @@ export const Dashboard = () => {
     </div>
     <div className="rounded-2xl border border-border bg-card p-5 space-y-2">
       <p>{stats.closed} recorded evidence-based closures; {stats.legacy} legacy assessments remain unverified.</p>
+      <p>{stats.hold} application Hold recommendations; {stats.decisions} recorded owner system decisions (including conditional, expired or stale decisions requiring review).</p>
       <p className="text-sm text-muted-foreground">Compliance and examination coverage are unknown unless specifically reviewed. Empty results are not evidence of safety.</p>
     </div>
     <section className="rounded-2xl border border-border bg-card p-6"><h3 className="font-semibold mb-4">Assessment activity (actual records, including revisions by redo)</h3>

@@ -4,11 +4,31 @@ import { toast } from 'sonner';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { clearThreatModels, db, deleteThreatModels } from '@/lib/db';
 import { assessmentSummary } from '@/lib/backend/assessmentQuality';
+import { createAssessmentBackup, restoreAssessmentBackup } from '@/lib/backend/assessmentBackup';
+import { getErrorMessage } from '@/lib/backend/inputUtils';
 
 export const DataManagementTab = () => {
   const models = useLiveQuery(() => db.threatModels.orderBy('date').reverse().toArray());
   const [isClearing, setIsClearing] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [backupBusy, setBackupBusy] = useState(false);
+  const exportBackup = async () => {
+    setBackupBusy(true);
+    try {
+      const url = URL.createObjectURL(await createAssessmentBackup());
+      const link = document.createElement('a'); link.href = url; link.download = `seidr-private-backup-${new Date().toISOString().slice(0, 10)}.json`; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success('Private backup downloaded. Store it securely; original files and source contents are included.');
+    } catch (error) { toast.error(`Backup failed: ${getErrorMessage(error)}`); }
+    finally { setBackupBusy(false); }
+  };
+  const importBackup = async (file: File) => {
+    if (!window.confirm('Restore this private backup? All records are validated first. Any conflicting IDs cancel the entire restore; existing records are never overwritten.')) return;
+    setBackupBusy(true);
+    try { await restoreAssessmentBackup(file); toast.success('Backup restored. Recorded decisions remain local self-attestations, not independently verified approvals.'); }
+    catch (error) { toast.error(`Restore failed; no records changed: ${getErrorMessage(error)}`); }
+    finally { setBackupBusy(false); }
+  };
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked && models) {
@@ -83,6 +103,15 @@ export const DataManagementTab = () => {
 
   return (
     <div className="max-w-5xl space-y-8">
+      <section className="border rounded-xl p-4 space-y-3">
+        <h3 className="font-semibold">Private assessment backup &amp; recovery</h3>
+        <p className="text-sm text-muted-foreground">Includes assessments, original attachments, retained sources, revision history, business risks and policy documents. Contains sensitive raw data that may itself include secrets. Excludes provider-credential/settings tables, account/user records, integration settings and agent caches. Maximum 256 MiB. Regular report exports are not recoverable backups.</p>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <button type="button" disabled={backupBusy} className="text-primary underline disabled:opacity-50" onClick={exportBackup}>{backupBusy ? 'Processing backup...' : 'Download private backup'}</button>
+          <label className="text-primary underline cursor-pointer">Restore backup<input type="file" accept=".json,application/json" disabled={backupBusy} className="block mt-2"
+            onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void importBackup(file); }} /></label>
+        </div>
+      </section>
       <div>
         <div className="flex justify-between items-center mb-4">
           <div>
@@ -161,7 +190,7 @@ export const DataManagementTab = () => {
                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                       'bg-secondary text-muted-foreground'
                     }`}>
-                      {model.quality ? assessmentSummary(model.quality).highest : `Legacy / unverified: ${model.riskScore}`}
+                      {model.quality ? assessmentSummary(model.quality).label : `Legacy / unverified: ${model.riskScore}`}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">

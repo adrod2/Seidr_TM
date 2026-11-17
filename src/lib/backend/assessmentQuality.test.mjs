@@ -10,6 +10,15 @@ test('unknown is never low and 5x5 ratings remain separate from CVSS/DREAD', () 
   assert.throws(() => rateRisk({ likelihood: 2.5, impact: 5, rationale: '', reviewer: '' }));
 });
 
+test('partially rated assessments never advertise the known subset as overall current risk', () => {
+  const risks = [unknownRisk({ id: 'rated' }), unknownRisk({ id: 'unrated' })];
+  risks[0].current = { likelihood: 1, impact: 1, rationale: 'Reviewed fixture', reviewer: 'Fixture owner' };
+  assert.equal(assessmentSummary({ risks }).highest, 'Low');
+  assert.equal(assessmentSummary({ risks }).label, 'Incomplete: 1 not rated; highest rated Low');
+  assert.equal(assessmentSummary({ risks: [risks[1]] }).label, 'Not rated');
+  assert.equal(assessmentSummary({ risks: [risks[0]] }).label, 'Low');
+});
+
 test('evidence references reproduce exact recorded lines, not merely a source title', async () => {
   const source = await makeEvidenceSource({ name: 'design.md', kind: 'document', text: 'Overview\nTLS required\nEnd',
     collectedAt: '2026-11-18', version: 'v1', derived: false, status: 'Complete', note: '' });

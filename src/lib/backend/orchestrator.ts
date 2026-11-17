@@ -1,15 +1,16 @@
 import { runSecurityPipeline } from './securityPipeline';
 import { agentC4Architect, agentThreatModeling, agentCompliance, agentRepositoryAnalysis, agentMitigationStrategist,
-  agentWebIntelligence, agentSummarizeDescription, agentDocumentDigest, fallbackDescriptionSummary } from './agents';
+  agentWebIntelligence, agentSummarizeDescription, agentDocumentDigest, agentAssessmentReview, fallbackDescriptionSummary } from './agents';
 import { type ContextSection, type InputStatus, CONTEXT_BUDGET_CHARS, assembleContext, sanitiseSection } from './analysisContext';
 import { prepareDocument } from './documentContext';
 import { mapLimit } from './asyncUtils';
-import { getErrorMessage, looksBinaryDocument } from './inputUtils';
+import { getErrorMessage, hashBytes, looksBinaryDocument } from './inputUtils';
 import { analyseRepositories, getRepositoryUrls } from './repositoryInputs';
 import { db, type ThreatModel } from '../db';
 import type { AnalysisResult, DescriptionSummary, WebIntelligence } from './types';
 import { snapshotModelInputs, type AnalysisPayload } from './modelInputs';
-import { createAssessmentQuality, makeEvidenceSource, primaryEvidenceExcerpts, qualitySchema, type EvidenceSource } from './assessmentQuality';
+import { createAssessmentQuality, makeEvidenceSource, parseThreats, primaryEvidenceExcerpts, qualitySchema, registeredRequirementIds, type EvidenceSource } from './assessmentQuality';
+import { buildReviewInventory } from './assessmentAnalysis';
 
 export type { AnalysisPayload, AnalysisDiagram } from './modelInputs';
 
@@ -26,8 +27,27 @@ const summarizeDescription = async (text: string): Promise<DescriptionSummary> =
   }
 };
 
-export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress: (step: number) => void): Promise<AnalysisResult> => {
+export const startAnalysisPipeline = async (payload: AnalysisPayload, progress: (step: number) => void): Promise<AnalysisResult> => {
+  const newModelId = `TM-${Date.now().toString(36).toUpperCase()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+  const systemId = payload.systemId || `SYS-${crypto.randomUUID()}`;
+  let lastStage = 0;
+  const onProgress = (step: number) => { lastStage = step; progress(step); };
   try {
+    const config = await db.aiConfig.get('default');
+    const generation = { provider: config?.provider || 'Not configured', model: config?.copilotModel || 'Provider default (exact model not recorded)', configurationChanged: false };
+    const { quality: workingQuality } = await createAssessmentQuality([], { components: [], edges: [], trustBoundaries: [] }, [], {
+      systemId, parentAssessmentId: payload.parentAssessmentId, parentAssessmentRevision: payload.parentAssessmentRevision, scope: payload.scope || '',
+      environment: payload.environment, systemVersion: payload.systemVersion, stageIssues: ['Analysis has not finished. No safety or readiness conclusion is available.'],
+    });
+    workingQuality.run = { state: 'Running', stage: 0, error: '' };
+    workingQuality.generation = generation;
+    await db.transaction('rw', db.threatModels, db.modelInputs, async () => {
+      await db.modelInputs.put(snapshotModelInputs(newModelId, { ...payload, systemId }));
+      await db.threatModels.add({ id: newModelId, name: payload.name || 'Untitled Threat Model',
+        description: 'Incomplete analysis. Original inputs remain available through Redo Threat Model.',
+        date: new Date().toISOString(), status: 'Analysis incomplete', riskScore: 0, framework: payload.frameworks?.join(', ') || '',
+        srg: { components: [], edges: [], trustBoundaries: [] }, threats: [], complianceGaps: [], quality: workingQuality });
+    });
     const repositoryUrls = getRepositoryUrls(payload.repositoryUrls, payload.repositoryUrl);
     const userText = payload.userDescription?.trim();
     const inputs: InputStatus[] = [];
@@ -160,8 +180,7 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     for (const kind of ['documents', 'diagrams'] as const) {
       for (const [index, file] of (payload.inputFiles?.[kind] || []).entries()) {
         if (!file) continue;
-        const digest = await crypto.subtle.digest('SHA-256', await file.contents.arrayBuffer());
-        const fileHash = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+        const fileHash = await hashBytes(await file.contents.arrayBuffer());
         const source = await makeEvidenceSource({
           name: `Original attachment: ${file.name}`, kind: 'attachment-metadata', collectedAt,
           text: `Original file: ${file.name}\nMIME type: ${file.type}\nBytes: ${file.contents.size}\nOriginal bytes SHA-256: ${fileHash}`,
@@ -254,31 +273,68 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     const frameworks = [...new Set(payload.frameworks.length ? payload.frameworks : ['STRIDE'])];
     const framework = frameworks.join(', ');
     const archThreats = (await mapLimit(frameworks, 2, lens => agentThreatModeling(srg, lens, fullContextForThreats))).flat();
+    const inventory = buildReviewInventory(srg, evidenceSources);
+    let review: Awaited<ReturnType<typeof agentAssessmentReview>> | undefined;
+    let reviewError = '';
+    try { review = await agentAssessmentReview(srg, fullContextForThreats, inventory, evidenceSources); }
+    catch (error) {
+      reviewError = `Coverage/conflict/specialist analysis failed: ${getErrorMessage(error)}. Inventory remains unassessed; redo to retry or record independent review.`;
+      console.error(reviewError, error);
+    }
     const { threats: allThreats, quality } = await createAssessmentQuality(
-      [...archThreats, ...repoThreats].sort((a, b) => b.cvssScore - a.cvssScore), srg, evidenceSources, {
-        systemId: payload.systemId || `SYS-${crypto.randomUUID()}`, parentAssessmentId: payload.parentAssessmentId,
-        scope: payload.scope || 'Scope and exclusions require owner confirmation.', environment: payload.environment, systemVersion: payload.systemVersion,
+      [...archThreats.map(threat => ({ ...threat, analysisOrigin: 'Architecture' as const })),
+        ...repoThreats.map(threat => ({ ...threat, analysisOrigin: 'Repository' as const })),
+        ...parseThreats(review?.additionalFindings || [], true).map(threat => ({ ...threat, analysisOrigin: 'Specialist' as const }))]
+        .sort((a, b) => b.cvssScore - a.cvssScore), srg, evidenceSources, {
+        systemId, parentAssessmentId: payload.parentAssessmentId, parentAssessmentRevision: payload.parentAssessmentRevision,
+        scope: payload.scope || '', environment: payload.environment, systemVersion: payload.systemVersion,
         stageIssues: inputs.filter(input => ['truncated', 'excluded', 'failed', 'empty'].includes(input.status))
           .map(input => `${input.name}: ${input.status}. ${input.note || ''}`),
       },
     );
+    quality.coverage = inventory;
+    if (reviewError) quality.stageIssues.push(reviewError);
+    if (review) {
+      for (const proposal of review.coverage) {
+        const row = quality.coverage.find(row => row.id === proposal.id)!;
+        row.proposal = { result: proposal.result, rationale: proposal.rationale, references: proposal.references };
+        row.requests = [...new Map([...row.requests, ...proposal.requests].map(request => [JSON.stringify([request.question, request.verification]), {
+          ...request, resolved: false, artifactSourceIds: [],
+        }])).values()];
+      }
+      for (const addition of review.inventoryAdditions) quality.coverage.push({
+        id: `INVENTORY-${crypto.randomUUID()}`, kind: addition.kind, name: addition.name, state: 'Not assessed', owner: '', rationale: '', references: [],
+        proposal: { result: 'Documented', rationale: addition.rationale, references: addition.references },
+        requests: [{ question: addition.question, supplier: addition.supplier, verification: addition.verification, resolved: false, artifactSourceIds: [] }],
+      });
+      quality.requirements = review.requirements.map(requirement => ({ ...requirement, id: `REQ-${crypto.randomUUID()}` }));
+      quality.conflicts = review.conflicts.map(conflict => ({
+        id: `CONFLICT-${crypto.randomUUID()}`, description: conflict.description, references: conflict.references, verification: conflict.verification,
+        riskIds: allThreats.filter(threat => conflict.componentIds.some(id => (threat.affectedComponentIds || [threat.componentId]).includes(id))
+          || conflict.flowIds.some(id => (threat.affectedFlowIds || []).includes(id))).map(threat => threat.id),
+        owner: '', resolved: false, resolution: '', artifactSourceIds: [],
+      }));
+    }
 
     onProgress(6);
-    const mitigationContext = assembleContext(sections, MITIGATION_CONTEXT_CHARS).text;
+    const mitigationContext = `${assembleContext(sections, MITIGATION_CONTEXT_CHARS).text}\nSourced requirements (link only registered IDs):\n${JSON.stringify(quality.requirements)}`;
     await mapLimit(allThreats, 2, async threat => {
       const risk = quality.risks.find(risk => risk.id === threat.id)!;
       try {
-        const strategy = await agentMitigationStrategist(threat, mitigationContext);
+        const strategy = await agentMitigationStrategist(threat, mitigationContext, registeredRequirementIds(quality.requirements));
         threat.mitigation = strategy.narrative;
+        risk.treatmentNarrative = strategy.narrative;
         risk.actions = strategy.actions.map(action => ({
           ...action, id: `ACTION-${crypto.randomUUID()}`, owner: '', status: 'Open',
           verification: { result: 'Not run', artifactSourceIds: [], reviewer: '', at: '', environment: '' },
         }));
+        risk.treatmentState = 'Generated';
       } catch (error) {
         const issue = `Action generation failed for ${threat.id}: ${getErrorMessage(error)}. Retry or record treatment before a decision.`;
         console.warn(issue, error);
         quality.stageIssues.push(issue);
         risk.issues.push(issue);
+        risk.treatmentState = 'Failed';
       }
     });
 
@@ -295,9 +351,9 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     // Kept only for old storage readers; versioned assessments use separate 5x5 ratings, never this legacy number.
     const riskScore = 0;
 
-    const timestampStr = Date.now().toString(36).toUpperCase();
-    const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const newModelId = `TM-${timestampStr}-${randomStr}`;
+    const finalConfig = await db.aiConfig.get('default');
+    quality.generation = { ...generation, configurationChanged: ['provider', 'endpoint', 'copilotModel'].some(key => config?.[key] !== finalConfig?.[key]) };
+    quality.run = { state: 'Ready for review', stage: 8, error: '' };
 
     const descriptionSummary = await descriptionSummaryPromise;
 
@@ -341,6 +397,16 @@ export const startAnalysisPipeline = async (payload: AnalysisPayload, onProgress
     return { success: true, modelId: newModelId };
   } catch (error) {
     console.error('Pipeline Error:', error);
-    return { success: false, error: getErrorMessage(error) };
+    let message = getErrorMessage(error);
+    try {
+      const current = await db.threatModels.get(newModelId);
+      if (current?.quality) await db.threatModels.update(newModelId, { status: 'Analysis failed / inputs retained',
+        quality: { ...current.quality, run: { state: 'Failed', stage: lastStage, error: message },
+          stageIssues: [...current.quality.stageIssues, `Analysis failed at stage ${lastStage}: ${message}. Redo this record to retry retained inputs.`] } });
+    } catch (storageError) {
+      console.error('Failed to retain interrupted analysis status', storageError);
+      message += ` The incomplete-run status could not be saved: ${getErrorMessage(storageError)}`;
+    }
+    return { success: false, modelId: newModelId, error: message };
   }
 };

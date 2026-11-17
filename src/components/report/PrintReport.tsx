@@ -3,7 +3,8 @@ import { SeidrLogo } from '../SeidrLogo';
 import { DREAD_DIMENSIONS, SEVERITIES, dreadMean, reportArchitecture, reportFindings, reportOverview,
   reportStrings, scoreLabel, severityKey, validScore, type ExportReport } from '@/lib/reportExport';
 import './PrintReport.css';
-import { assessmentSummary, rateRisk } from '@/lib/backend/assessmentQuality';
+import { assessmentSummary, qualitySchema, rateRisk } from '@/lib/backend/assessmentQuality';
+import { assessmentReadiness, recordedDecisionLabel } from '@/lib/backend/assessmentWorkflow';
 
 const SectionHeading = ({ number, title }: { number: string; title: string }) => (
   <h2 className="report-section-heading"><span>{number}</span>{title}</h2>
@@ -26,7 +27,8 @@ export const PrintReport = ({ modelData, diagramSvg = '' }: { modelData: ExportR
   const meta = modelData.assessmentMeta;
   const repositories = meta?.repositoryUrls ?? (meta?.repositoryUrl ? [meta.repositoryUrl] : []);
   const date = new Date(modelData.date);
-  const quality = modelData.quality;
+  const quality = modelData.quality ? qualitySchema.parse(modelData.quality) : undefined;
+  const readiness = quality ? assessmentReadiness(quality) : undefined;
 
   return (
     <article className="seidr-report" aria-label={t.reportTitle}>
@@ -38,7 +40,7 @@ export const PrintReport = ({ modelData, diagramSvg = '' }: { modelData: ExportR
           <div><dt>{t.modelId}</dt><dd>{modelData.id}</dd></div>
           <div><dt>{t.dateGenerated}</dt><dd>{Number.isNaN(date.getTime()) ? t.notRecorded : date.toLocaleDateString()}</dd></div>
           <div><dt>{t.framework}</dt><dd>{modelData.framework || t.notRecorded}</dd></div>
-          <div><dt>{quality ? 'Current business risk' : 'Historical score (unverified)'}</dt><dd>{quality ? assessmentSummary(quality).highest
+          <div><dt>{quality ? 'Current business risk' : 'Historical score (unverified)'}</dt><dd>{quality ? assessmentSummary(quality).label
             : Number.isFinite(modelData.riskScore) ? `${modelData.riskScore} / 100 (legacy, not validated business risk)` : t.notRecorded}</dd></div>
         </dl>
       </header>
@@ -56,10 +58,15 @@ export const PrintReport = ({ modelData, diagramSvg = '' }: { modelData: ExportR
         <h3>{t.systemOverview}</h3>
         <p className="report-text">{overview || t.noDescription}</p>
         <p className="report-callout">{t.riskNote}</p>
-        {quality && <div className="report-callout"><strong>Decision status: Review required.</strong>
+        {quality && <div className="report-callout"><strong>Decision status: {recordedDecisionLabel(quality)}. Application recommendation: {readiness!.recommendation}.</strong>
           <p>Revision {quality.revision}; system {quality.systemId}; environment {quality.environment || t.notRecorded}; system version {quality.systemVersion || t.notRecorded}.</p>
+          {quality.parentAssessmentId && <p>Parent assessment: {quality.parentAssessmentId}; recorded parent revision: {quality.parentAssessmentRevision || t.notRecorded}.</p>}
           <p>Scope: {quality.scope}. Evidence cutoff: {quality.evidenceCutoff}. Rubric: {quality.rubric.version}; approved by {quality.rubric.approvedBy || 'Unconfirmed'}.</p>
           <p>{assessmentSummary(quality).blockers} blockers; {assessmentSummary(quality).unrated} unrated current risks; {assessmentSummary(quality).accepted} active risk acceptances; {assessmentSummary(quality).closed} recorded evidence-based closures.</p>
+          <p>{quality.risks.length} unique scenarios; {quality.observations.length} retained observations. Architecture: {quality.observations.filter(item => item.origin === 'Architecture').length}; repository/static: {quality.observations.filter(item => item.origin === 'Repository').length}; specialist: {quality.observations.filter(item => item.origin === 'Specialist').length}; origin not recorded: {quality.observations.filter(item => item.origin === 'Unspecified').length}.</p>
+          <Field label="Owner system decision and pending gates" value={`${quality.releaseDecision.state}; owner: ${quality.releaseDecision.owner || t.notRecorded}; recorded: ${quality.releaseDecision.at || t.notRecorded}.\nRationale: ${quality.releaseDecision.rationale || t.notRecorded}\nExpiry: ${quality.releaseDecision.expiresAt || t.notRecorded}; review trigger: ${quality.releaseDecision.reviewTrigger || t.notRecorded}\n${quality.releaseDecision.conditions.map((condition, index) => `Gate ${index + 1}: ${condition.requirement}; owner: ${condition.owner}; risk: ${condition.riskId || t.notRecorded}; action: ${condition.actionId || t.notRecorded}`).join('\n')}`} missing={t.notRecorded} />
+          <Field label="Application decision-impact checks" value={readiness!.reasons.join('\n') || 'No outstanding application checks; this is not an independent security certification.'} missing={t.notRecorded} />
+          <Field label="Generation provenance / run" value={`${quality.generation.provider}; ${quality.generation.model}; configuration changed: ${quality.generation.configurationChanged ? 'Yes' : 'No'}.\n${quality.run.state}; stage ${quality.run.stage}; ${quality.run.error}`} missing={t.notRecorded} />
           <p>Likelihood × business impact uses separate 1–5 levels: Low 1–5, Medium 6–11, High 12–19, Critical 20–25. Unknown is not low. Conditional target risk is not current risk. Local owner/reviewer records are self-attestations, not authenticated signatures or an independent audit.</p>
           {quality.stageIssues.length > 0 && <Field label="Outstanding collection/generation limitations" value={quality.stageIssues.join('\n')} missing={t.notRecorded} />}
         </div>}
@@ -160,6 +167,7 @@ export const PrintReport = ({ modelData, diagramSvg = '' }: { modelData: ExportR
               if (!risk) return <p className="report-callout">Canonical risk record unavailable. Do not rely on this report as complete.</p>;
               return <div>
                 <h3>Evidence and decision register</h3>
+                <Field label="CVSS provenance (technical severity, not business risk)" value={`Version: ${threat.cvssVersion || t.notRecorded}; vector: ${threat.cvssVector || t.notRecorded}; rationale: ${threat.cvssRationale || t.notRecorded}. Missing metadata means the score is an unverified technical estimate, not a reproducible vector calculation.`} missing={t.notRecorded} />
                 <Field label="Accountable owner / disposition" value={`${risk.owner || 'Owner unconfirmed'} / ${risk.disposition}`} missing={t.notRecorded} />
                 <Field label="Evidence status / confidence" value={`${risk.evidenceStatus}; ${risk.confidence.level}: ${risk.confidence.reason}`} missing={t.notRecorded} />
                 <Field label="Framework lenses" value={risk.frameworkTags.join('; ')} missing={t.notRecorded} />
@@ -176,7 +184,8 @@ export const PrintReport = ({ modelData, diagramSvg = '' }: { modelData: ExportR
                 {risk.controls.map((control, index) => <Field key={index} label={`Recorded control (${control.state})`}
                   value={`${control.description}\nCurrent effectiveness locally attested: ${control.verified ? 'Yes' : 'No'}\nArtifacts: ${control.artifactSourceIds.join(', ') || t.notRecorded}`} missing={t.notRecorded} />)}
                 {risk.missingEvidence.map((request, index) => <Field key={index} label={`Verification request ${index + 1}`}
-                  value={`${request.question}\nSupplier: ${request.supplier || 'Unconfirmed'}\nVerification: ${request.verification}`} missing={t.notRecorded} />)}
+                  value={`${request.question}\nSupplier: ${request.supplier || 'Unconfirmed'}\nVerification: ${request.verification}\nResolved by retained proof: ${request.resolved ? 'Yes' : 'No'}; artifacts: ${request.artifactSourceIds.join(', ')}`} missing={t.notRecorded} />)}
+                <Field label={`Treatment generation: ${risk.treatmentState}`} value={risk.treatmentNarrative} missing={t.notRecorded} />
                 {risk.actions.map((action, index) => <div key={action.id} className="report-mitigation"><h4>Action {index + 1}: {action.description || 'Incomplete action'}</h4>
                   <p>{action.id} | {action.status} | {action.priority}</p>
                   <Field label="Confirmed owner / proposed role" value={`${action.owner || 'Unconfirmed'} / ${action.proposedOwner || t.notRecorded}`} missing={t.notRecorded} />
@@ -196,13 +205,19 @@ export const PrintReport = ({ modelData, diagramSvg = '' }: { modelData: ExportR
         ))}
       </section>
       {quality && <section className="report-appendix"><SectionHeading number="05" title="Coverage, reconciliation and source versions" />
+        <p>{t.qualityLanguageNote}</p>
         <p>Examined: {quality.coverage.filter(row => row.state === 'Examined').length} / {quality.coverage.length}. A classified unknown is not examined coverage.</p>
         <table><thead><tr><th>Inventory item</th><th>State / reviewer</th><th>Rationale / references</th></tr></thead><tbody>
           {quality.coverage.map(row => <tr key={row.id}><td>{row.kind}: {row.name}</td><td>{row.state}<small>{row.owner || 'Unconfirmed'}</small></td>
-            <td>{row.rationale || t.notRecorded}{row.references.map((reference, index) => <small key={index}>{reference.sourceId}: {reference.startLine}–{reference.endLine}; {reference.quote}</small>)}</td></tr>)}
+            <td>{row.rationale || t.notRecorded}{row.references.map((reference, index) => <small key={index}>{reference.sourceId}: {reference.startLine}–{reference.endLine}; {reference.quote}</small>)}
+              {row.proposal && <small>AI proposal only: {row.proposal.result}; {row.proposal.rationale}; {row.proposal.references.map(reference => `${reference.sourceId}:${reference.startLine}-${reference.endLine}: ${reference.quote}`).join('; ')}</small>}
+              {row.requests.map((request, index) => <small key={`request-${index}`}>Question: {request.question}; supplier: {request.supplier}; check: {request.verification}; resolved: {request.resolved ? 'Yes' : 'No'}; artifacts: {request.artifactSourceIds.join(', ')}</small>)}
+            </td></tr>)}
         </tbody></table>
         {quality.conflicts.map(conflict => <Field key={conflict.id} label={`Conflict ${conflict.id} — ${conflict.resolved ? 'Resolved by local review' : 'Needs verification'}`}
-          value={`${conflict.description}\nOwner: ${conflict.owner || 'Unconfirmed'}\nVerification: ${conflict.verification}\nResolution: ${conflict.resolution || t.notRecorded}`} missing={t.notRecorded} />)}
+          value={`${conflict.description}\n${conflict.references.map(reference => `${reference.sourceId}:${reference.startLine}-${reference.endLine}: ${reference.quote}`).join('\n')}\nOwner: ${conflict.owner || 'Unconfirmed'}\nVerification: ${conflict.verification}\nResolution: ${conflict.resolution || t.notRecorded}\nRetained proof: ${conflict.artifactSourceIds.join(', ') || t.notRecorded}`} missing={t.notRecorded} />)}
+        {quality.requirements.map(requirement => <Field key={requirement.id} label={`Sourced requirement: ${requirement.id} / ${requirement.externalId}`}
+          value={`${requirement.description}\n${requirement.references.map(reference => `${reference.sourceId}:${reference.startLine}-${reference.endLine}: ${reference.quote}`).join('\n')}`} missing={t.notRecorded} />)}
         <Field label="Observation reconciliation" value={quality.reconciliation.map(item => `${item.riskId}: ${item.observationIds.join(', ')}\n${item.reason}`).join('\n\n')} missing={t.notRecorded} />
         {(modelData.evidenceManifest || []).map(source => <Field key={source.id} label={source.name}
           value={`${source.id}\nSHA-256: ${source.contentHash}\nCollected: ${source.collectedAt}; version: ${source.version}; ${source.status}; ${source.derived ? 'Generated, not primary evidence' : 'Retained primary text'}\nOriginal source IDs: ${(source.parentSourceIds || []).join(', ') || t.notRecorded}\n${source.note}`} missing={t.notRecorded} />)}

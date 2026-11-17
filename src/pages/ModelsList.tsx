@@ -4,6 +4,7 @@ import { Calendar, ShieldAlert, ArrowRight, Activity, Clock, Loader2 } from 'luc
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { assessmentSummary } from '@/lib/backend/assessmentQuality';
+import { recordedDecisionLabel } from '@/lib/backend/assessmentWorkflow';
 
 export const ModelsList = () => {
   const models = useLiveQuery(() => db.threatModels.orderBy('date').reverse().toArray());
@@ -52,7 +53,7 @@ export const ModelsList = () => {
                   <div className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
                     'bg-secondary text-muted-foreground'
                   }`}>
-                    {model.quality ? `Current risk: ${assessmentSummary(model.quality).highest}` : `Legacy score (unverified): ${model.riskScore}`}
+                    {model.quality ? `Current risk: ${assessmentSummary(model.quality).label}` : `Legacy score (unverified): ${model.riskScore}`}
                   </div>
                 </div>
                 
@@ -85,7 +86,7 @@ export const ModelsList = () => {
 
                 <div className="flex items-center justify-between border-t border-border/50 pt-4 mt-auto">
                   <span className={`text-sm font-medium ${model.status === 'Completed' ? 'text-emerald-500' : 'text-amber-500'}`}>
-                    {model.status}
+                    {model.quality?.run && model.quality.run.state !== 'Ready for review' ? 'Analysis incomplete / redo available' : recordedDecisionLabel(model.quality)}
                   </span>
                   <div className="text-primary group-hover:translate-x-1 transition-transform">
                     <ArrowRight className="h-5 w-5" />
