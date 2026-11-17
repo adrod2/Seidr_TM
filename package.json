@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "copilot:server": "node --env-file-if-exists=.env src/server/copilotServer.mjs",
-    "test": "node --test src/server/copilotServer.test.mjs src/server/crawler.test.mjs src/server/github.test.mjs src/lib/c4Layout.test.mjs src/lib/c4Model.test.mjs src/lib/backend/analysisContext.test.mjs src/lib/backend/documentContext.test.mjs src/lib/backend/threatModelPrompt.test.mjs src/lib/backend/asyncUtils.test.mjs src/lib/backend/inputUtils.test.mjs src/lib/backend/agentCache.test.mjs src/lib/backend/repositoryInputs.test.mjs src/lib/backend/githubScanner.test.mjs src/lib/backend/modelInputs.test.mjs",
+    "test": "node --test src/server/copilotServer.test.mjs src/server/crawler.test.mjs src/server/github.test.mjs src/lib/c4Layout.test.mjs src/lib/c4Model.test.mjs src/lib/reportExport.test.mjs src/lib/backend/analysisContext.test.mjs src/lib/backend/documentContext.test.mjs src/lib/backend/threatModelPrompt.test.mjs src/lib/backend/asyncUtils.test.mjs src/lib/backend/inputUtils.test.mjs src/lib/backend/agentCache.test.mjs src/lib/backend/repositoryInputs.test.mjs src/lib/backend/githubScanner.test.mjs src/lib/backend/modelInputs.test.mjs",
     "test:copilot": "node --test src/server/copilotServer.test.mjs src/server/crawler.test.mjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",

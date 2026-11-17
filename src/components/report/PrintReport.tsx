@@ -1,155 +1,181 @@
-"use client";
-
 import React from 'react';
-import { CheckCircle2, Server } from 'lucide-react';
 import { SeidrLogo } from '../SeidrLogo';
+import { DREAD_DIMENSIONS, SEVERITIES, dreadMean, reportArchitecture, reportFindings, reportOverview,
+  reportStrings, scoreLabel, severityKey, validScore, type ExportReport } from '@/lib/reportExport';
+import './PrintReport.css';
 
-export const PrintReport = ({ modelData }: { modelData: any }) => {
+const SectionHeading = ({ number, title }: { number: string; title: string }) => (
+  <h2 className="report-section-heading"><span>{number}</span>{title}</h2>
+);
+
+const Field = ({ label, value, missing }: { label: string; value?: string; missing: string }) => (
+  <div className="report-field"><h4>{label}</h4><p className="report-text">{value?.trim() ? value : missing}</p></div>
+);
+
+export const PrintReport = ({ modelData, diagramSvg = '' }: { modelData: ExportReport; diagramSvg?: string }) => {
   if (!modelData) return null;
-
-  const nonCompliantGaps = modelData.complianceGaps?.filter(
-    (g: any) => g.status === 'Gap Identified' || g.status === 'Partially Met'
-  ) || [];
-
-  // Fallback to English if translation strings are missing
-  const t = modelData.uiStrings || {
-    reportTitle: "Threat Model Report",
-    systemName: "System Name",
-    modelId: "Model ID",
-    dateGenerated: "Date Generated",
-    framework: "Framework",
-    riskScore: "Risk Score",
-    identifiedThreats: "Identified Threats & Mitigations",
-    noThreats: "No threats identified.",
-    description: "Description",
-    exploitationPath: "Exploitation Path",
-    suggestedMitigation: "Suggested Mitigation Action",
-    noMitigation: "No specific mitigation provided.",
-    complianceGaps: "Compliance Gaps (NIST SP 800-53)",
-    noGaps: "No critical compliance gaps identified. All mapped controls are met.",
-    controlId: "Control ID",
-    title: "Title",
-    status: "Status",
-    details: "Details"
-  };
+  const t = reportStrings(modelData);
+  const findings = reportFindings(modelData);
+  const architecture = reportArchitecture(modelData.srg);
+  const overview = reportOverview(modelData);
+  const componentNames = new Map(architecture.elements.map(c => [c.id, c.name]));
+  const counts = Object.fromEntries([...SEVERITIES, 'Unrated'].map(severity => [
+    severity.toLowerCase(), findings.filter(({ threat }) => severityKey(threat.severity) === severity.toLowerCase()).length,
+  ]));
+  const meta = modelData.assessmentMeta;
+  const repositories = meta?.repositoryUrls ?? (meta?.repositoryUrl ? [meta.repositoryUrl] : []);
+  const date = new Date(modelData.date);
 
   return (
-    <div className="hidden print:block p-8 bg-white text-black max-w-4xl mx-auto font-sans w-full">
-      {/* Header */}
-      <div className="border-b-2 border-gray-200 pb-6 mb-8">
-        <div className="flex items-center gap-3 mb-4">
-          <SeidrLogo className="h-10 w-10" />
-          <h1 className="text-3xl font-bold text-gray-900">{t.reportTitle}</h1>
+    <article className="seidr-report" aria-label={t.reportTitle}>
+      <header className="report-header">
+        <div className="report-brand"><SeidrLogo className="report-logo" /><span>SEIDR</span><small>{t.reportSubtitle}</small></div>
+        <h1>{t.reportTitle}</h1>
+        <p className="report-system-name">{modelData.name}</p>
+        <dl className="report-metadata">
+          <div><dt>{t.modelId}</dt><dd>{modelData.id}</dd></div>
+          <div><dt>{t.dateGenerated}</dt><dd>{Number.isNaN(date.getTime()) ? t.notRecorded : date.toLocaleDateString()}</dd></div>
+          <div><dt>{t.framework}</dt><dd>{modelData.framework || t.notRecorded}</dd></div>
+          <div><dt>{t.riskScore}</dt><dd>{Number.isFinite(modelData.riskScore) ? `${modelData.riskScore} / 100` : t.notRecorded}</dd></div>
+        </dl>
+      </header>
+
+      <section>
+        <SectionHeading number="01" title={t.findingsSummary} />
+        <div className="report-metrics">
+          <div><strong>{findings.length}</strong><span>{t.totalFindings}</span></div>
+          {SEVERITIES.map(severity => <div key={severity} data-severity={severityKey(severity)}>
+            <strong>{counts[severity.toLowerCase()]}</strong><span>{t[severityKey(severity)]}</span>
+          </div>)}
         </div>
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p><span className="font-semibold text-gray-600">{t.systemName}:</span> {modelData.name}</p>
-            <p><span className="font-semibold text-gray-600">{t.modelId}:</span> {modelData.id}</p>
-            <p><span className="font-semibold text-gray-600">{t.dateGenerated}:</span> {new Date(modelData.date).toLocaleDateString()}</p>
-          </div>
-          <div>
-            <p><span className="font-semibold text-gray-600">{t.framework}:</span> {modelData.framework}</p>
-            <p><span className="font-semibold text-gray-600">{t.riskScore}:</span> {modelData.riskScore}</p>
-          </div>
-        </div>
-      </div>
+        {counts.unrated > 0 && <p>{t.unrated}: <strong>{counts.unrated}</strong></p>}
+        <p className="report-component-count">{t.affectedComponents}: <strong>{new Set(findings.filter(f => f.threat.componentId?.trim()).map(f => f.component)).size}</strong></p>
+        <h3>{t.systemOverview}</h3>
+        <p className="report-text">{overview || t.noDescription}</p>
+        <p className="report-callout">{t.riskNote}</p>
+      </section>
 
-      {/* Threats Section */}
-      <div className="mb-12">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6 border-b border-gray-200 pb-2">{t.identifiedThreats}</h2>
-        {modelData.threats?.length === 0 ? (
-          <p className="text-gray-500">{t.noThreats}</p>
-        ) : (
-          <div className="space-y-8">
-            {modelData.threats?.map((threat: any, index: number) => (
-              <div key={threat.id} className="break-inside-avoid border border-gray-200 rounded-lg p-5 bg-gray-50">
-                <div className="flex items-start justify-between mb-3">
-                  <h3 className="text-lg font-bold text-gray-900">
-                    {index + 1}. {threat.title}
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono bg-gray-200 px-2 py-1 rounded text-gray-700">{threat.id}</span>
-                    <span className={`text-xs font-bold px-2 py-1 rounded ${
-                      threat.severity === 'Critical' ? 'bg-red-100 text-red-800' : 
-                      threat.severity === 'High' ? 'bg-orange-100 text-orange-800' :
-                      threat.severity === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-green-100 text-green-800'
-                    }`}>
-                      {threat.severity} (CVSS: {threat.cvssScore})
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
-                  <span className="bg-gray-200 px-2 py-0.5 rounded-md text-gray-800 font-medium">{threat.category}</span>
-                  <span className="flex items-center gap-1 font-medium"><Server className="h-3.5 w-3.5"/> {threat.componentId}</span>
-                </div>
-
-                <div className="space-y-4 text-sm text-gray-800">
-                  <div>
-                    <p className="font-semibold text-gray-900 mb-1">{t.description}:</p>
-                    <p className="leading-relaxed">{threat.description}</p>
-                  </div>
-                  
-                  {threat.reasoning && (
-                    <div>
-                      <p className="font-semibold text-gray-900 mb-1">{t.exploitationPath}:</p>
-                      <p className="leading-relaxed">{threat.reasoning}</p>
-                    </div>
-                  )}
-
-                  <div className="bg-white border border-gray-200 rounded-md p-4 mt-4 shadow-sm">
-                    <p className="font-bold text-emerald-700 flex items-center gap-1.5 mb-2">
-                      <CheckCircle2 className="h-4 w-4" /> {t.suggestedMitigation}
-                    </p>
-                    <p className="leading-relaxed text-gray-700">{threat.mitigation || t.noMitigation}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Compliance Section */}
-      <div className="mb-12 break-inside-avoid">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6 border-b border-gray-200 pb-2">{t.complianceGaps}</h2>
-        {nonCompliantGaps.length === 0 ? (
-          <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg flex items-center gap-3">
-            <CheckCircle2 className="h-6 w-6" />
-            <p className="font-medium">{t.noGaps}</p>
-          </div>
-        ) : (
-          <table className="w-full text-sm text-left border-collapse">
-            <thead className="bg-gray-100 text-gray-700">
-              <tr>
-                <th className="px-4 py-3 border border-gray-200 font-semibold w-24">{t.controlId}</th>
-                <th className="px-4 py-3 border border-gray-200 font-semibold w-1/4">{t.title}</th>
-                <th className="px-4 py-3 border border-gray-200 font-semibold w-28">{t.status}</th>
-                <th className="px-4 py-3 border border-gray-200 font-semibold">{t.details}</th>
+      <section className="report-priority-section">
+        <SectionHeading number="02" title={t.priorityFindings} />
+        <p className="report-caption">{t.priorityNote}</p>
+        {!findings.length ? <p>{t.noThreats}</p> : (
+          <table className="report-priority-table">
+            <thead><tr><th>{t.priority}</th><th>{t.title}</th><th>{t.severity}</th><th>{t.cvss}</th><th>{t.component}</th></tr></thead>
+            <tbody>{findings.map(({ threat, priority, anchor, component }) => (
+              <tr key={anchor}>
+                <td><a href={`#${anchor}`} className="report-priority">{String(priority).padStart(2, '0')}</a></td>
+                <td><a href={`#${anchor}`}><strong>{threat.title}</strong></a><small>{threat.id}<br />{threat.category || t.notRecorded}</small></td>
+                <td><span className="report-severity" data-severity={severityKey(threat.severity)}>{t[severityKey(threat.severity)]}</span></td>
+                <td className="report-score">{scoreLabel(threat.cvssScore, t.notRecorded)}</td>
+                <td>{component}</td>
               </tr>
-            </thead>
-            <tbody>
-              {nonCompliantGaps.map((gap: any, idx: number) => (
-                <tr key={idx} className="bg-white">
-                  <td className="px-4 py-3 border border-gray-200 font-mono font-bold text-gray-900">{gap.controlId}</td>
-                  <td className="px-4 py-3 border border-gray-200 font-medium text-gray-900">{gap.title}</td>
-                  <td className="px-4 py-3 border border-gray-200">
-                    <span className={`font-bold px-2 py-1 rounded text-xs ${gap.status === 'Gap Identified' || gap.status === 'Brecha identificada' ? 'text-red-700 bg-red-50' : 'text-orange-700 bg-orange-50'}`}>
-                      {gap.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 border border-gray-200 text-gray-700">{gap.description}</td>
-                </tr>
-              ))}
-            </tbody>
+            ))}</tbody>
           </table>
         )}
-      </div>
-      
-      <div className="text-center text-gray-400 text-xs mt-12 pt-4 border-t border-gray-200">
-        Generated by Seidr AI Threat Modeling • {new Date().toISOString()}
-      </div>
-    </div>
+      </section>
+
+      <section className="report-architecture">
+        <SectionHeading number="03" title={t.architecture} />
+        <p className="report-caption">{architecture.hasComponentDetail ? t.architectureNote : t.legacyArchitectureNote}</p>
+        {diagramSvg ? (
+          <figure>
+            {/* Only strict-mode Mermaid output generated from escaped C4 labels is inserted. */}
+            <div className="report-diagram" role="img" aria-label={t.architecture} dangerouslySetInnerHTML={{ __html: diagramSvg }} />
+            <figcaption>{modelData.name} | {modelData.id} | {t.componentRegister} / {t.relationshipRegister}</figcaption>
+          </figure>
+        ) : <p className="report-callout">{architecture.elements.length ? t.diagramNotPrepared : t.noArchitecture}</p>}
+      </section>
+
+      {architecture.elements.length > 0 && <section className="report-architecture-register">
+        <h2 className="report-section-heading">{t.architectureRegister}</h2>
+        <h3>{t.componentRegister}</h3>
+        <table>
+          <thead><tr><th>{t.component}</th><th>{t.technology}</th><th>{t.description}</th></tr></thead>
+          <tbody>{architecture.elements.map(c => <tr key={c.id}>
+            <td><strong>{c.name}</strong><small>{c.id}</small></td>
+            <td>{c.c4Type}{c.technology && <small>{c.technology}</small>}</td>
+            <td className="report-text">{c.description || t.notRecorded}</td>
+          </tr>)}</tbody>
+        </table>
+        {architecture.relations.length > 0 && <>
+          <h3>{t.relationshipRegister}</h3>
+          <table>
+            <thead><tr><th>{t.component}</th><th>{t.relationship}</th></tr></thead>
+            <tbody>{architecture.relations.map((r, index) => <tr key={`${r.id}-${index}`}>
+              <td>{componentNames.get(r.sourceId)} [{r.sourceId}] &rarr; {componentNames.get(r.targetId)} [{r.targetId}]</td>
+              <td>{r.label || t.notRecorded}{r.protocol && <small>{r.protocol}</small>}</td>
+            </tr>)}</tbody>
+          </table>
+        </>}
+        {!!modelData.srg?.trustBoundaries?.length && <Field label={t.trustBoundaries} value={modelData.srg.trustBoundaries.join('\n')} missing={t.notRecorded} />}
+      </section>}
+
+      <section className="report-findings">
+        <SectionHeading number="04" title={t.identifiedThreats} />
+        {!findings.length && <p>{t.noThreats}</p>}
+        {findings.map(({ threat, priority, anchor, component, mitigations }) => (
+          <article className="report-finding" id={anchor} key={anchor}>
+            <header className="report-finding-header" data-severity={severityKey(threat.severity)}>
+              <p>{t.priority} {String(priority).padStart(2, '0')} <span className="report-finding-id">{threat.id}</span></p>
+              <h3>{threat.title}</h3>
+              <span className="report-severity" data-severity={severityKey(threat.severity)}>{t[severityKey(threat.severity)]}</span>
+              <span className="report-cvss">{t.cvss}: <strong>{scoreLabel(threat.cvssScore, t.notRecorded)}</strong> / 10</span>
+            </header>
+            <dl className="report-finding-metadata">
+              <div><dt>{t.framework}</dt><dd>{modelData.framework || t.notRecorded}</dd></div>
+              <div><dt>{t.category}</dt><dd>{threat.category || t.notRecorded}</dd></div>
+              <div><dt>{t.component}</dt><dd>{component}</dd></div>
+              <div><dt>{t.treatmentStatus}</dt><dd>{threat.status || t.notRecorded}</dd></div>
+            </dl>
+            <Field label={t.description} value={threat.description} missing={t.notRecorded} />
+            <Field label={t.evidence} value={threat.evidence} missing={t.notRecorded} />
+            <Field label={t.exploitationPath} value={threat.reasoning} missing={t.notRecorded} />
+            <div className="report-risk"><Field label={t.exploitationRisk} value={threat.exploitationRisk} missing={t.missingRisk} /></div>
+            {(threat.dread || /\bDREAD\b/i.test(threat.reasoning || '')) && <div className="report-field">
+              <h4>{t.dread}</h4>
+              <p className="report-caption">{t.dreadNote}</p>
+              {threat.dread && <dl className="report-dread">
+                {DREAD_DIMENSIONS.map(key => <div key={key}><dt>{t[key]}</dt><dd>{validScore(threat.dread[key], 1) ? threat.dread[key] : t.notRecorded}</dd></div>)}
+                <div><dt>{t.dreadMean}</dt><dd>{scoreLabel(dreadMean(threat), t.notRecorded)} / 10</dd></div>
+              </dl>}
+            </div>}
+            <div className="report-mitigation">
+              <h4>{t.suggestedMitigation}</h4>
+              {mitigations.length ? <ol>{mitigations.map((action, index) => <li className="report-text" key={index}>{action}</li>)}</ol> : <p>{t.noMitigation}</p>}
+            </div>
+            {threat.justification && <Field label={t.justification} value={threat.justification} missing={t.notRecorded} />}
+          </article>
+        ))}
+      </section>
+
+      <section className="report-appendix">
+        <SectionHeading number="05" title={t.complianceGaps} />
+        {!modelData.complianceGaps?.length ? <p>{t.noGaps}</p> : (
+          <table><thead><tr><th>{t.controlId}</th><th>{t.title}</th><th>{t.status}</th><th>{t.details}</th></tr></thead>
+            <tbody>{modelData.complianceGaps.map((gap, index) => <tr key={`${gap.controlId}-${index}`}>
+              <td>{gap.controlId}</td><td>{gap.title}</td><td>{gap.status}</td><td className="report-text">{gap.description}</td>
+            </tr>)}</tbody>
+          </table>
+        )}
+      </section>
+
+      <section>
+        <SectionHeading number="06" title={t.scope} />
+        <p className="report-caption">{t.scopeNote}</p>
+        {repositories.length > 0 && <p className="report-text">{repositories.join('\n')}</p>}
+        {meta?.sourceUrl && <p className="report-text">{meta.sourceUrl}</p>}
+        {!!meta?.localDocuments?.length && <p className="report-text">{meta.localDocuments.join('\n')}</p>}
+        {!!meta?.globalDocuments?.length && <p className="report-text">{meta.globalDocuments.join('\n')}</p>}
+        {meta?.inputs?.length ? <table>
+          <thead><tr><th>{t.source}</th><th>{t.inputKind}</th><th>{t.status}</th><th>{t.retained}</th></tr></thead>
+          <tbody>{meta.inputs.map((input, index) => <tr key={index}>
+            <td>{input.name}{input.note && <small className="report-text">{input.note}</small>}</td>
+            <td>{input.kind}{input.method && <small>{input.method}</small>}</td>
+            <td>{input.status}</td><td>{input.chars} / {input.sourceChars ?? t.notRecorded}</td>
+          </tr>)}</tbody>
+        </table> : <p>{t.noInputs}</p>}
+      </section>
+      <footer className="report-footer">{t.generatedBy} | {modelData.id}</footer>
+    </article>
   );
 };

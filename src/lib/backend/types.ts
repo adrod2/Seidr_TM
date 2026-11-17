@@ -37,6 +37,14 @@ export interface Threat {
   mitigation?: string;
   evidence?: string;
   reasoning?: string;
+  exploitationRisk?: string;
+  dread?: {
+    damage: number;
+    reproducibility: number;
+    exploitability: number;
+    affectedUsers: number;
+    discoverability: number;
+  };
   status?: string;
   justification?: string;
 }

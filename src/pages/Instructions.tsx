@@ -178,7 +178,8 @@ export const Instructions = () => {
             <h4 className="font-bold text-blue-700 dark:text-blue-400 mb-1">Exporting & Translating Reports</h4>
             <p className="text-sm text-blue-600/80 dark:text-blue-300/80 leading-relaxed">
               Use the <strong>"Export Report"</strong> button at the top right of any report to generate a professional PDF, CSV, or JSON file. 
-              You can also select a target language (e.g., Spanish, German) during export, and the AI agent will translate the entire report seamlessly before saving.
+              The PDF includes a findings summary, a severity-ranked index, the component-level C4 diagram, and full finding details: scores, framework categories, affected components, evidence, exploitation paths, exploitation risk and all mitigation actions. Compliance mappings and input-coverage limitations are included too. Choose <strong>Save as PDF</strong> in the print dialog and disable browser headers/footers for the cleanest layout.
+              You can select a target language (e.g., Spanish, German) before export. Identifiers, scores, framework categories and architecture remain unchanged. Missing information in older assessments is explicitly marked rather than invented.
             </p>
           </div>
         </div>

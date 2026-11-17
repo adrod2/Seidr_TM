@@ -51,3 +51,14 @@ test('all frameworks must use repository documentation independently of static c
     assert.match(prompt, /do not.*claim that live DAST was performed/);
   }
 });
+
+test('reports receive a qualitative exploitation assessment without treating CVSS as likelihood', () => {
+  for (const framework of ['Hybrid TM', 'STRIDE', 'PASTA', 'MAESTRO']) {
+    const prompt = buildThreatModelPrompt(framework, method);
+    assert.match(prompt, /"exploitationRisk"/);
+    assert.match(prompt, /do not invent a probability/);
+    assert.match(prompt, /label missing information and assumptions/);
+  }
+  assert.match(buildThreatModelPrompt('Hybrid TM', method), /"dread": \{ "damage"/);
+  assert.doesNotMatch(buildThreatModelPrompt('STRIDE', method), /"dread"/);
+});

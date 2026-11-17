@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Link, useParams } from 'react-router-dom';
 import { ShieldAlert, GitMerge, CheckSquare, FileCheck, Download, Share2, Sparkles, Loader2, X, LayoutDashboard, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -16,6 +17,8 @@ import { CopilotSidebar } from '@/components/report/CopilotSidebar';
 import { PrintReport } from '@/components/report/PrintReport';
 import { TabButton } from '@/components/TabButton';
 import { agentTranslateReport } from '@/lib/backend/agents';
+import { buildFindingsCsv, prioritizeThreats, renderReportDiagram, type ExportReport } from '@/lib/reportExport';
+import { getErrorMessage } from '@/lib/backend/inputUtils';
 
 export const Report = () => {
   const { id } = useParams();
@@ -28,8 +31,8 @@ export const Report = () => {
   const [exportFormat, setExportFormat] = useState('pdf');
   const [exportLanguage, setExportLanguage] = useState('en');
   
-  // State for the translated data passed to the PrintReport component
-  const [translatedPrintData, setTranslatedPrintData] = useState<any>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [preparedPrint, setPreparedPrint] = useState<{ data: ExportReport; diagramSvg: string } | null>(null);
 
   // Fetch from Dexie Local DB
   const modelData = useLiveQuery(() => id ? db.threatModels.get(id) : undefined, [id]);
@@ -65,8 +68,8 @@ export const Report = () => {
   const formattedDate = new Date(modelData.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
   const exportFormats = [
-    { id: 'pdf', label: 'PDF Report (Threats & Mitigations)' },
-    { id: 'csv', label: 'CSV (Threats Table)' },
+    { id: 'pdf', label: 'Complete PDF Report (Summary, C4 & Findings)' },
+    { id: 'csv', label: 'CSV (Complete Findings)' },
     { id: 'json', label: 'JSON (Raw Data)' }
   ];
 
@@ -79,87 +82,52 @@ export const Report = () => {
     { id: 'zh', label: 'Chinese' }
   ];
 
-  const handleExport = () => {
+  const handleExport = async () => {
+    if (isExporting) return;
     setIsExportModalOpen(false);
+    setIsExporting(true);
     const langLabel = exportLanguages.find(l => l.id === exportLanguage)?.label || 'English';
-
-    const performExport = async () => {
-      try {
-        let dataToExport = modelData;
-
-        // Execute translation if necessary
-        if (exportLanguage !== 'en') {
-          dataToExport = await agentTranslateReport(modelData, langLabel);
+    const progress = toast.loading(exportLanguage === 'en'
+      ? 'Preparing complete report...'
+      : `Translating report to ${langLabel}...`);
+    try {
+      const dataToExport = exportLanguage === 'en' ? modelData : await agentTranslateReport(modelData, langLabel);
+      if (exportFormat === 'pdf') {
+        const diagramSvg = await renderReportDiagram(dataToExport);
+        flushSync(() => setPreparedPrint({ data: dataToExport, diagramSvg }));
+        await document.fonts.ready;
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+        toast.dismiss(progress);
+        toast.info('Select "Save as PDF" in the print dialog. Disable browser headers and footers for the cleanest report.', { duration: 6000 });
+        const originalTitle = document.title;
+        try {
+          document.title = `${modelData.id}_report_${exportLanguage}`;
+          window.print();
+        } finally {
+          document.title = originalTitle;
         }
-
-        if (exportFormat === 'json') {
-          const dataStr = JSON.stringify({ ...dataToExport, exportLanguage }, null, 2);
-          const blob = new Blob([dataStr], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = `${modelData.id}_report_${exportLanguage}.json`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-          toast.success(`JSON exported successfully in ${langLabel}!`);
-          
-        } else if (exportFormat === 'csv') {
-          if (!dataToExport.threats || dataToExport.threats.length === 0) {
-            toast.error('No threats found to export.');
-            return;
-          }
-          
-          const headers = ['Threat ID', 'Title', 'Severity', 'CVSS', 'Category', 'Component'];
-          const rows = dataToExport.threats.map((t: any) => [
-            t.id,
-            `"${t.title.replace(/"/g, '""')}"`,
-            t.severity,
-            t.cvssScore,
-            `"${t.category}"`,
-            `"${t.componentId}"`
-          ]);
-          
-          const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = `${modelData.id}_threats_${exportLanguage}.csv`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-          toast.success(`CSV exported successfully in ${langLabel}!`);
-
-        } else if (exportFormat === 'pdf') {
-          // Set the data for the Print component and wait a tick for React to render it
-          setTranslatedPrintData(dataToExport);
-          
-          setTimeout(() => {
-            window.print();
-          }, 500);
-        }
-      } catch (error) {
-        console.error('Export failed:', error);
-        throw error; // Let the toast.promise catch it
-      }
-    };
-
-    if (exportLanguage !== 'en') {
-      toast.promise(performExport(), {
-          loading: `Translating report to ${langLabel} (this may take a moment)...`,
-          success: `Translation complete. Preparing ${exportFormat.toUpperCase()}.`,
-          error: 'Failed to translate report. Check AI configuration.'
-        });
       } else {
-        if (exportFormat === 'pdf') {
-          toast.info(`Preparing PDF... Please select "Save as PDF" as the destination.`, { duration: 4000 });
-        }
-        performExport();
+        const content = exportFormat === 'csv' ? buildFindingsCsv(dataToExport)
+          : JSON.stringify({ ...dataToExport, threats: prioritizeThreats(dataToExport.threats), exportLanguage }, null, 2);
+        const blob = new Blob([content], { type: exportFormat === 'csv' ? 'text/csv;charset=utf-8;' : 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${modelData.id}_report_${exportLanguage}.${exportFormat}`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        toast.success(`${exportFormat.toUpperCase()} exported in ${langLabel}.`);
       }
-    };
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast.error(`Report export failed: ${getErrorMessage(error)}`);
+    } finally {
+      toast.dismiss(progress);
+      setIsExporting(false);
+    }
+  };
   
     const handleThreatSelect = (threatId: string) => {
       setActiveTab('threats');
@@ -217,10 +185,11 @@ export const Report = () => {
             </button>
             <button 
               onClick={() => setIsExportModalOpen(true)}
-              className="bg-primary text-primary-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-primary/90 transition-all shadow-sm"
+              disabled={isExporting}
+              className="bg-primary text-primary-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-primary/90 transition-all shadow-sm disabled:opacity-50"
             >
-              <Download className="h-4 w-4" />
-              Export Report
+              {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              {isExporting ? 'Preparing Report...' : 'Export Report'}
             </button>
           </div>
         </div>
@@ -317,6 +286,7 @@ export const Report = () => {
                 </button>
                 <button
                   onClick={handleExport}
+                  disabled={isExporting}
                   className="px-6 py-2.5 rounded-xl text-sm font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm flex items-center gap-2"
                 >
                   <Download className="h-4 w-4" /> Download
@@ -326,7 +296,8 @@ export const Report = () => {
           </div>
         )}
       </div>
-      <PrintReport modelData={translatedPrintData || modelData} />
+      <PrintReport modelData={preparedPrint?.data.id === modelData.id ? preparedPrint.data : modelData}
+        diagramSvg={preparedPrint?.data.id === modelData.id ? preparedPrint.diagramSvg : ''} />
     </>
   );
 };

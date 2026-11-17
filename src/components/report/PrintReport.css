@@ -1,0 +1,118 @@
+.seidr-report {
+  display: none;
+}
+
+@page {
+  size: A4;
+  margin: 15mm 14mm 17mm;
+  @bottom-left {
+    content: "SEIDR  |  THREAT MODEL REPORT";
+    font: 8pt Arial, sans-serif;
+    color: #64748b;
+  }
+  @bottom-right {
+    content: counter(page) " / " counter(pages);
+    font: 8pt Arial, sans-serif;
+    color: #64748b;
+  }
+}
+
+@page architecture {
+  size: A4 landscape;
+  margin: 12mm 14mm 17mm;
+}
+
+@media print {
+  html, body, #root {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+  [data-sonner-toaster] { display: none !important; }
+  .seidr-report {
+    display: block;
+    width: 100%;
+    color: #182b3a;
+    background: white;
+    font: 10pt/1.55 Arial, Helvetica, sans-serif;
+    overflow-wrap: anywhere;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .seidr-report * { box-sizing: border-box; }
+  .seidr-report h1, .seidr-report h2, .seidr-report h3, .seidr-report h4 {
+    color: #102f3a;
+    font-weight: 700;
+    line-height: 1.3;
+    break-after: avoid;
+  }
+  .seidr-report h1 { margin: 9mm 0 2mm; font-size: 30pt; letter-spacing: -0.8pt; }
+  .seidr-report h3 { font-size: 12pt; margin: 6mm 0 2mm; }
+  .seidr-report h4 { font-size: 10pt; margin: 0 0 2mm; }
+  .seidr-report p { margin: 0 0 3mm; orphans: 3; widows: 3; }
+  .seidr-report small { display: block; font-size: 8pt; color: #526371; margin-top: 1mm; }
+  .seidr-report a { color: inherit; text-decoration: none; }
+  .seidr-report section { margin-bottom: 8mm; }
+  .report-header { border-top: 2mm solid #16716e; padding-top: 6mm; margin-bottom: 8mm; }
+  .report-brand { display: flex; align-items: center; gap: 3mm; color: #155e5b; }
+  .report-brand > span { font-size: 15pt; font-weight: 700; letter-spacing: 3pt; }
+  .report-brand > small { margin-left: auto; font-size: 9pt; }
+  .report-logo { width: 12mm; height: 12mm; flex: none; }
+  .report-system-name { font-size: 19pt; color: #425867; margin-bottom: 6mm !important; }
+  .report-metadata, .report-finding-metadata { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm 6mm; }
+  .report-metadata { border-top: 0.3mm solid #d5e0e5; border-bottom: 0.3mm solid #d5e0e5; padding: 4mm 0; }
+  .seidr-report dt { color: #526371; font-size: 8pt; font-weight: 700; margin-bottom: 1mm; }
+  .seidr-report dd { margin: 0; }
+  .report-section-heading { display: flex; align-items: center; gap: 3mm; font-size: 16pt; border-bottom: 0.3mm solid #cbd9df; padding-bottom: 3mm; margin: 7mm 0 4mm; }
+  .report-section-heading > span { color: #16716e; font-size: 10pt; letter-spacing: 1pt; }
+  .report-metrics { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2mm; break-inside: avoid; }
+  .report-metrics > div { padding: 3mm; border: 0.3mm solid #d5e0e5; border-top: 1mm solid #155e75; border-radius: 1mm; }
+  .report-metrics strong { display: block; font-size: 23pt; line-height: 1.2; }
+  .report-metrics span { display: block; font-size: 8pt; margin-top: 1mm; }
+  .report-component-count { margin-top: 3mm !important; color: #526371; }
+  .report-text { white-space: pre-wrap; }
+  .report-caption { font-size: 8.5pt; color: #526371; }
+  .report-callout { border-left: 1mm solid #16716e; background: #f0f7f6; padding: 3mm 4mm; font-size: 9pt; }
+  .seidr-report table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8.5pt; margin: 3mm 0 5mm; }
+  .seidr-report thead { display: table-header-group; }
+  .seidr-report tr { break-inside: avoid; }
+  .seidr-report th { background: #edf3f5; color: #254451; text-align: left; font-weight: 700; }
+  .seidr-report th, .seidr-report td { padding: 2.5mm 2mm; border-bottom: 0.25mm solid #dce5e9; vertical-align: top; }
+  .seidr-report tbody tr:nth-child(even) { background: #f8fafb; }
+  .report-priority-table th:nth-child(1) { width: 10%; }
+  .report-priority-table th:nth-child(2) { width: 37%; }
+  .report-priority-table th:nth-child(3) { width: 15%; }
+  .report-priority-table th:nth-child(4) { width: 13%; }
+  .report-priority-table th:nth-child(5) { width: 25%; }
+  .report-priority { display: inline-block; font-size: 12pt; font-weight: 700; color: #155e5b !important; }
+  .report-priority-section { break-before: page; }
+  .report-score { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .report-severity { display: inline-block; font-size: 8pt; font-weight: 700; border: 0.3mm solid; border-radius: 1mm; padding: 0.5mm 1.5mm; }
+  .seidr-report [data-severity="critical"] { color: #991b1b; border-color: #b91c1c; }
+  .seidr-report [data-severity="high"] { color: #9a3412; border-color: #c2410c; }
+  .seidr-report [data-severity="medium"] { color: #854d0e; border-color: #a16207; }
+  .seidr-report [data-severity="low"] { color: #1e40af; border-color: #2563eb; }
+  .seidr-report [data-severity="unrated"] { color: #475569; border-color: #64748b; }
+  .report-architecture { page: architecture; break-before: page; break-after: page; }
+  .report-architecture figure { margin: 4mm 0 0; break-inside: avoid; }
+  .report-diagram { border: 0.3mm solid #d5e0e5; border-radius: 2mm; padding: 3mm; }
+  .report-diagram svg { display: block; width: 100% !important; height: 118mm !important; max-width: none !important; }
+  .report-architecture figcaption { text-align: center; color: #526371; font-size: 8pt; margin-top: 3mm; }
+  .report-findings, .report-appendix { break-before: page; }
+  .report-finding + .report-finding { break-before: page; }
+  .report-finding { margin-bottom: 8mm; }
+  .report-finding-header { border-top: 1mm solid; padding-top: 3mm; break-inside: avoid; break-after: avoid; }
+  .report-finding-header h3 { font-size: 19pt; margin: 2mm 0 3mm; }
+  .report-finding-header > p { font-size: 9pt; font-weight: 700; }
+  .report-finding-id { float: right; font-family: monospace; color: #526371; }
+  .report-cvss { color: #182b3a; margin-left: 4mm; font-size: 9pt; }
+  .report-finding-metadata { padding: 4mm; background: #f4f7f9; margin: 4mm 0; }
+  .report-field { margin: 4mm 0; }
+  .report-risk { border-left: 0.8mm solid #a16207; padding-left: 3mm; }
+  .report-mitigation { border-left: 1mm solid #16716e; padding: 3mm 4mm; background: #f0f7f6; margin: 5mm 0; }
+  .report-mitigation ol { padding-left: 5mm; margin: 0; list-style: decimal; }
+  .report-mitigation li { margin-bottom: 2mm; padding-left: 1mm; }
+  .report-dread { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2mm; padding: 3mm; border: 0.3mm solid #d5e0e5; break-inside: avoid; }
+  .report-dread dd { font-weight: 700; }
+  .report-footer { border-top: 0.3mm solid #cbd9df; margin-top: 8mm; padding-top: 3mm; font-size: 8pt; color: #526371; }
+}
