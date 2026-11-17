@@ -9,9 +9,10 @@
   "scripts": {
     "dev": "vite",
     "copilot:server": "node --env-file-if-exists=.env src/server/copilotServer.mjs",
-    "test": "node --test src/server/copilotServer.test.mjs src/server/crawler.test.mjs src/server/github.test.mjs src/lib/c4Layout.test.mjs src/lib/c4Routes.test.mjs src/lib/c4Model.test.mjs src/lib/threatMap.test.mjs src/lib/reportExport.test.mjs src/lib/backend/analysisContext.test.mjs src/lib/backend/documentContext.test.mjs src/lib/backend/threatModelPrompt.test.mjs src/lib/backend/asyncUtils.test.mjs src/lib/backend/inputUtils.test.mjs src/lib/backend/agentCache.test.mjs src/lib/backend/repositoryInputs.test.mjs src/lib/backend/githubScanner.test.mjs src/lib/backend/modelInputs.test.mjs",
+    "test": "node --test src/server/copilotServer.test.mjs src/server/crawler.test.mjs src/server/github.test.mjs src/lib/c4Layout.test.mjs src/lib/c4Routes.test.mjs src/lib/c4Model.test.mjs src/lib/threatMap.test.mjs src/lib/reportExport.test.mjs src/lib/assessmentExport.test.mjs src/lib/backend/assessmentQuality.test.mjs src/lib/backend/analysisContext.test.mjs src/lib/backend/documentContext.test.mjs src/lib/backend/threatModelPrompt.test.mjs src/lib/backend/asyncUtils.test.mjs src/lib/backend/inputUtils.test.mjs src/lib/backend/agentCache.test.mjs src/lib/backend/repositoryInputs.test.mjs src/lib/backend/githubScanner.test.mjs src/lib/backend/modelInputs.test.mjs",
     "test:copilot": "node --test src/server/copilotServer.test.mjs src/server/crawler.test.mjs",
     "build": "vite build",
+    "schema:assessment": "node scripts/generate-assessment-schema.mjs",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -47,7 +48,6 @@
     "@radix-ui/react-toggle-group": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.4",
     "@tanstack/react-query": "^5.56.2",
-    "@tavily/core": "^0.7.2",
     "@xyflow/react": "^12.10.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -85,6 +85,7 @@
     "@types/react": "^19.2.8",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react-swc": "^3.9.0",
+    "ajv": "^8.17.1",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.9.0",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
@@ -94,6 +95,7 @@
     "tailwindcss": "^3.4.11",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
-    "vite": "^6.3.4"
+    "vite": "^6.3.4",
+    "zod-to-json-schema": "3.24.5"
   }
 }

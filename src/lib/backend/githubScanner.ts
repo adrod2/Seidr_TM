@@ -98,14 +98,20 @@ export const scanGitHubRepository = async (owner: string, repo: string): Promise
     throw new Error('Repository metadata does not specify a default branch.');
   }
   const branch = metadata.default_branch;
+  const collectedAt = new Date().toISOString();
+  const commit: { sha?: string } = await (await request(`${api}/commits/${encodeURIComponent(branch)}`)).json();
+  if (!commit.sha || !/^[a-f0-9]{40,64}$/i.test(commit.sha)) {
+    throw new Error('GitHub did not return a valid immutable commit. File collection was stopped.');
+  }
+  const revision = commit.sha;
   const scannedFiles: ScannedFile[] = [];
   const contextSources: RepositorySource[] = [{
-    kind: 'metadata', name: 'Repository metadata', url: api, text: JSON.stringify(metadata, null, 2),
+    kind: 'metadata', name: 'Repository metadata', url: api, text: JSON.stringify(metadata, null, 2), collectedAt,
   }];
   const collectionNotes: string[] = [];
   const [tree] = await Promise.all([
     (async () => {
-      const treeUrl = `${api}/git/trees/${encodeURIComponent(branch)}?recursive=1`;
+      const treeUrl = `${api}/git/trees/${revision}?recursive=1`;
       try {
         const data: { tree: TreeFile[]; truncated?: boolean } = await (await request(treeUrl)).json();
         if (!Array.isArray(data.tree)) throw new Error('GitHub returned an invalid file tree.');
@@ -130,12 +136,12 @@ export const scanGitHubRepository = async (owner: string, repo: string): Promise
         }
         const body = await readBoundedText(response, GITHUB_SCAN_LIMITS.documentationCharsPerFile);
         contextSources.push({
-          kind: 'metadata', name, url, text: body.text, status: body.truncated ? 'truncated' : 'included',
+          kind: 'metadata', name, url, text: body.text, status: body.truncated ? 'truncated' : 'included', collectedAt,
           note: body.truncated ? 'Metadata response exceeded the per-source text limit.' : undefined,
         });
       } catch (error) {
         console.warn(`Could not collect ${name} for ${owner}/${repo}.`, error);
-        contextSources.push({ kind: 'metadata', name, url, text: '', status: 'failed', note: getErrorMessage(error) });
+        contextSources.push({ kind: 'metadata', name, url, text: '', status: 'failed', note: getErrorMessage(error), collectedAt });
       }
     }),
   ]);
@@ -168,7 +174,7 @@ export const scanGitHubRepository = async (owner: string, repo: string): Promise
   ];
   const contents = await mapLimit(selected, 4, async ({ file, kind, limit }) => {
     const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
-    const url = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${encodedPath}`;
+    const url = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${revision}/${encodedPath}`;
     try {
       const content = await readBoundedText(await request(url), limit);
       return { file, kind, url, ...content };
@@ -182,21 +188,20 @@ export const scanGitHubRepository = async (owner: string, repo: string): Promise
     const { file, kind, url, text, truncated } = content;
     const note = content.error || (truncated ? `Text shortened to ${kind === 'code' ? GITHUB_SCAN_LIMITS.codeCharsPerFile : docChars} characters during collection.` : undefined);
     if (!content.error) scannedFiles.push({ path: file.path, size: file.size ?? new TextEncoder().encode(text).length, kind });
-    if (kind === 'documentation') {
-      contextSources.push({
-        kind, name: file.path, url, text, sourceChars: text.length,
-        status: content.error ? 'failed' : !text.trim() ? 'empty' : truncated ? 'truncated' : 'included', note,
-      });
-    } else if (content.error) {
+    contextSources.push({
+      kind, name: file.path, url, text, sourceChars: text.length, revision, collectedAt,
+      status: content.error ? 'failed' : !text.trim() ? 'empty' : truncated ? 'truncated' : 'included', note,
+    });
+    if (kind === 'code' && content.error) {
       collectionNotes.push(`${file.path}: ${content.error}`);
-    } else {
+    } else if (kind === 'code') {
       codeParts.push(`File: ${file.path}\nSource: ${url}\n${text}${note ? `\n[${note}]` : ''}`);
     }
   }
-  collectionNotes.push('Repository scope: default-branch text files, repository metadata, languages and latest release; external linked sites, wiki, issues and older releases are not crawled. No live DAST was performed.');
+  collectionNotes.push(`Repository scope: text files pinned to ${revision} (default branch ${branch}); repository metadata, languages and latest release are collection-time snapshots, not commit-bound facts. External linked sites, wiki, issues and older releases are not crawled. No live DAST was performed.`);
   return {
     contextString: [
-      `Repository: ${owner}/${repo}\nDefault branch: ${branch}`,
+      `Repository: ${owner}/${repo}\nDefault branch: ${branch}\nImmutable revision: ${revision}`,
       `--- FILE TREE (first 400 of ${files.length} files) ---\n${files.slice(0, 400).map(file => file.path).join('\n')}`,
       `--- STATIC CODE AND CONFIGURATION SAMPLE (SAST/SCA, NOT DAST) ---\n${codeParts.join('\n\n')}`,
     ].join('\n\n'),

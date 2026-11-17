@@ -20,7 +20,7 @@ import {
 } from '@xyflow/react';
 import { Plus, Save, X, LayoutTemplate, ShieldAlert, Focus, ListFilter } from 'lucide-react';
 import { C4Node, C4BoundaryNode, C4Edge, C4ThreatNode, C4_NODE_WIDTH, C4_PALETTE, paletteFor, type C4NodeData, type C4EdgeData } from './C4Node';
-import { db } from '@/lib/db';
+import { saveAssessmentArchitecture } from '@/lib/backend/assessmentStore';
 import { toast } from 'sonner';
 import { LAYOUT_MODES, computeLayout, Positions } from '@/lib/c4Layout';
 import { type C4Level, displayProtocol, systemName, toC4Element, visibleComponents, visibleRelations } from '@/lib/c4Model';
@@ -122,7 +122,7 @@ const C4ArchitectureContent = ({ srg, modelId, threats = EMPTY_THREATS, onThreat
   const inspect = useCallback((target: InspectedTarget) => { setInspected(target); setShowInspector(true); }, []);
   const persistDiagram = useCallback(async () => {
     try {
-      const updated = await db.threatModels.update(modelId, { srg: draftRef.current });
+      const updated = await saveAssessmentArchitecture(modelId, draftRef.current);
       if (!updated) throw new Error('The assessment no longer exists.');
       setDirty(false);
       return true;

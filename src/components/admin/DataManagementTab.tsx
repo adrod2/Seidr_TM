@@ -3,6 +3,7 @@ import { Loader2, Trash2, AlertTriangle, Calendar, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { clearThreatModels, db, deleteThreatModels } from '@/lib/db';
+import { assessmentSummary } from '@/lib/backend/assessmentQuality';
 
 export const DataManagementTab = () => {
   const models = useLiveQuery(() => db.threatModels.orderBy('date').reverse().toArray());
@@ -131,7 +132,7 @@ export const DataManagementTab = () => {
                 </th>
                 <th className="px-6 py-4">Model Name / ID</th>
                 <th className="px-6 py-4">Date Generated</th>
-                <th className="px-6 py-4">Risk Score</th>
+                <th className="px-6 py-4">Current risk / historical score</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -158,11 +159,9 @@ export const DataManagementTab = () => {
                   </td>
                   <td className="px-6 py-4">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                      model.riskScore >= 80 ? 'bg-destructive/10 text-destructive' :
-                      model.riskScore >= 50 ? 'bg-amber-500/10 text-amber-500' :
-                      'bg-emerald-500/10 text-emerald-500'
+                      'bg-secondary text-muted-foreground'
                     }`}>
-                      {model.riskScore}
+                      {model.quality ? assessmentSummary(model.quality).highest : `Legacy / unverified: ${model.riskScore}`}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">

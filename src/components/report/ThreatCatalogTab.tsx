@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Filter, AlertTriangle, Server, CheckCircle2, ShieldAlert, ChevronDown, ChevronUp, Search, X, SlidersHorizontal } from 'lucide-react';
-import { toast } from 'sonner';
 import type { Threat } from '@/lib/backend/types';
 import { mitigationActions } from '@/lib/reportExport';
 
 const EMPTY_THREATS: Threat[] = [];
 
-export const ThreatCatalogTab = ({ threats, framework = 'STRIDE', selectedThreatId }: { threats?: Threat[], framework?: string, selectedThreatId?: string | null }) => {
+export const ThreatCatalogTab = ({ threats, framework = 'STRIDE', selectedThreatId, onReview }: {
+  threats?: Threat[]; framework?: string; selectedThreatId?: string | null; onReview?: (id: string) => void;
+}) => {
   const displayThreats = threats || EMPTY_THREATS;
   
   const [expandedThreats, setExpandedThreats] = useState<Set<string>>(new Set());
@@ -226,16 +227,18 @@ export const ThreatCatalogTab = ({ threats, framework = 'STRIDE', selectedThreat
                 
                 <div className="flex justify-end gap-2 border-t border-border/50 pt-4 mt-4">
                   <button 
-                    onClick={() => toast.success('Risk formally accepted. Added to risk register.')}
+                    onClick={() => onReview?.(threat.id)}
+                    disabled={!onReview}
                     className="text-xs font-medium px-4 py-2 rounded-xl border border-border/50 hover:bg-secondary/50 flex items-center gap-1.5 transition-colors text-muted-foreground hover:text-foreground shadow-sm"
                   >
-                    <CheckCircle2 className="h-3.5 w-3.5" /> Accept Risk
+                    <CheckCircle2 className="h-3.5 w-3.5" /> {onReview ? 'Review Risk Decision' : 'Legacy decision unverified'}
                   </button>
                   <button 
-                    onClick={() => toast.success('New mitigation action created!')}
+                    onClick={() => onReview?.(threat.id)}
+                    disabled={!onReview}
                     className="text-xs font-medium px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 transition-colors shadow-sm"
                   >
-                    <ShieldAlert className="h-3.5 w-3.5" /> Create Mitigation
+                    <ShieldAlert className="h-3.5 w-3.5" /> {onReview ? 'Review Actions & Evidence' : 'Redo to create verified actions'}
                   </button>
                 </div>
               </div>

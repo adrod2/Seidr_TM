@@ -95,7 +95,7 @@ export const NewModel = () => {
   const [loadingRedo, setLoadingRedo] = useState(Boolean(redoId));
   const [redoError, setRedoError] = useState('');
   const [redoWarnings, setRedoWarnings] = useState<string[]>([]);
-  const [additionalInputs, setAdditionalInputs] = useState<Pick<AnalysisPayload, 'questionnaire' | 'documentation'>>({});
+  const [additionalInputs, setAdditionalInputs] = useState<Pick<AnalysisPayload, 'questionnaire' | 'documentation' | 'systemId' | 'parentAssessmentId' | 'environment' | 'systemVersion' | 'scope'>>({});
 
   useEffect(() => {
     let active = true;
@@ -126,7 +126,9 @@ export const NewModel = () => {
         setSelectedFramework(payload.frameworks[0] || 'STRIDE');
         setRepoUrls(payload.repositoryUrls?.length ? [...payload.repositoryUrls] : payload.repositoryUrl ? [payload.repositoryUrl] : ['']);
         setSourceUrl(payload.sourceUrl || '');
-        setAdditionalInputs({ questionnaire: payload.questionnaire, documentation: payload.documentation });
+        setAdditionalInputs({ questionnaire: payload.questionnaire, documentation: payload.documentation,
+          systemId: payload.systemId, parentAssessmentId: payload.parentAssessmentId,
+          environment: payload.environment, systemVersion: payload.systemVersion, scope: payload.scope });
         setUploadedDocs((payload.documents || []).map((doc, index) => ({
           ...restoreInputFile(payload.inputFiles?.documents[index], doc.name, doc.text), result: doc, isExtracting: false,
         })));
@@ -295,9 +297,12 @@ export const NewModel = () => {
 
     const hasOtherInputs = diagrams.some(d => d.description) || repositoryUrls.length > 0 || uploadedDocs.some(d => d.result?.text) || !!crawlTarget;
     const usedDefaultDescription = !description.trim() && !hasOtherInputs;
-    const payloadDesc = usedDefaultDescription
-      ? "Standard web application running on AWS with React frontend and Node backend using a PostgreSQL database."
-      : description.trim() || 'No textual description was provided; derive the system from the supporting documents, diagrams, website and repository sections.';
+    if (usedDefaultDescription && !additionalInputs.documentation?.content.trim()) {
+      toast.error('Add a system description, repository, document, diagram or reference URL. Seidr will not invent a default architecture.');
+      setIsAnalyzing(false);
+      return;
+    }
+    const payloadDesc = description.trim() || 'No textual description was provided; derive the system from the supporting documents, diagrams, website and repository sections. Unspecified architecture remains unknown.';
 
     const result = await startAnalysisPipeline(
       {
@@ -311,7 +316,7 @@ export const NewModel = () => {
         localDocuments: uploadedDocs.map(d => d.file.name),
         documents: uploadedDocs.map(d => d.result || { name: d.file.name, size: d.file.size, method: 'unsupported', status: 'failed', text: '', note: 'Not read.' }),
         userDescription: description,
-        usedDefaultDescription,
+        usedDefaultDescription: false,
         sourceUrl: crawlTarget || undefined,
         webIntelligence: webIntel && crawlTarget && webIntel.sourceUrl.replace(/\/$/, '') === crawlTarget.replace(/\/$/, '') ? webIntel : undefined,
         inputFiles: {
@@ -325,7 +330,7 @@ export const NewModel = () => {
     );
 
     if (result.success === true) {
-      toast.success('Threat model generated successfully');
+      toast.success('Threat model generated. Review evidence, owners and risk decisions before relying on it.');
       setTimeout(() => navigate(`/models/${result.modelId}`), 800);
     } else {
       toast.error(`Analysis failed: ${result.error}`);

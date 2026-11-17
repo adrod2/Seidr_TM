@@ -52,6 +52,8 @@ test('the resource allowlist rejects other hosts, account endpoints, credentials
     'https://api.github.com/repos/org/repo/issues', 'https://api.github.com/repos/org/repo?secret=1',
     'https://api.github.com/repos/org/repo/git/trees/main?recursive=1&extra=2',
     'https://api.github.com/repos/org/repo/git/trees/main?recursive=0',
+    'https://api.github.com/repos/org/repo/commits/main/comments',
+    'https://api.github.com/repos/org/repo/commits/main?per_page=100',
     'https://raw.githubusercontent.com/org/repo/main/docs%2F..%2Fsecret.txt',
     'https://raw.githubusercontent.com/org/repo/main/README.md?token=secret',
     'https://api.github.com:444/repos/org/repo', 'https://api.github.com/repos/org/repo#fragment',
@@ -62,6 +64,7 @@ test('the resource allowlist rejects other hosts, account endpoints, credentials
   for (const url of [
     'https://api.github.com/repos/org/repo', 'https://api.github.com/repos/org/repo/languages',
     'https://api.github.com/repos/org/repo/releases/latest',
+    'https://api.github.com/repos/org/repo/commits/release%2Fnext',
     'https://api.github.com/repos/org/repo/git/trees/release%2Fnext?recursive=1',
   ]) assert.equal(resolveGitHubResource(url).url, url);
 });

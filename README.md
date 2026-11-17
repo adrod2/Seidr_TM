@@ -17,14 +17,25 @@ By taking natural language descriptions, system diagrams, and repository URLs, S
 - **Interactive C4 Threat Map**: One editable Level 1/2/3 graph connects findings to affected components and data flows. Click a severity-labelled threat arrow to open the expanded finding, or inspect a component/flow to explore all linked threats. Filter by severity, locate targets across levels, and cycle six non-overlapping layouts. Unmapped findings remain visible without guessed links. Static PDF diagrams remain available.
 - **Intelligent Threat Catalog**: Identifies vulnerabilities, assigns CVSS scores, and explains exploitation paths based on the provided architecture.
 - **Hybrid TM**: Select Hybrid TM in New Model to combine STRIDE security, LINDDUN privacy and PASTA business-risk analysis. The threat agent loads `src/lib/backend/hybrid-method.md` directly into its prompt, adapting the protocol's example stack to your actual system. Findings include business impact and mapped controls in their descriptions, and attack paths plus DREAD risk scoring in their reasoning. Existing CVSS scores and report workflows remain unchanged.
-- **Interactive Mitigation Kanban Board**: Drag-and-drop tasks to track mitigations. Move tasks to "Exception" with mandatory business justifications.
-- **Compliance & Business Risk Mapping**: Automatically evaluates identified threats against required controls (e.g., NIST SP 800-53) and global business risk registers.
+- **Evidence & Risk Review**: Review canonical scenarios, exact source quotes/lines, confidence, confirmed ownership, controls and complete treatment actions. Each action records dependencies, an acceptance test, expected evidence and remaining risk. Closure requires passing retained verification for the assessed environment; acceptance is a separate, owned, expiring decision, never mitigation. Original observations and exact-scenario merge reasons remain in the register. Unverified scenarios receive an explicit verification request.
+- **Separate Business and Technical Risk**: New assessments start **Review required**, with unrated business risk. An owner-approved, versioned 5-by-5 likelihood/impact rubric uses Low 1-5, Medium 6-11, High 12-19 and Critical 20-25. Unknown is never low; inherent, current and conditional target ratings remain separate. CVSS and DREAD never feed this matrix. Historical scores and old mitigation notes remain explicitly unverified.
+- **Proposed Compliance Mappings**: AI-suggested relationships to required controls (for example NIST SP 800-53) need human review. Organizational business risks and obligations are supplied to analysis independently of policies. Empty mappings do not establish compliance; no control totals or completed integrations are invented.
 - **AI Security Copilot**: Context-aware chat sidebar to interrogate the threat model, draft Jira tickets, or ask for specific mitigation code snippets.
 - **Global Knowledge Base (RAG)**: Upload organizational policies and standards in the Admin dashboard to inform the AI's compliance and threat evaluations.
-- **Multilingual Exports**: Export reports to PDF, CSV, or JSON. Built-in agentic translation allows exporting the entire threat model in multiple languages (Spanish, German, French, etc.).
+- **Multilingual Exports**: Translate technical report narrative into Spanish, German, French and other supported languages. Decision records, exact evidence, owner names and identifiers remain unchanged; the structured quality appendix currently retains its English labels and source wording.
 - **Complete, Prioritized Reports**: PDF exports include an executive findings summary, a linked severity-ranked index, a landscape component-level C4 diagram with full component/relationship registers, detailed finding pages, compliance mappings and input coverage. Each finding retains its ID/title, methodology/category, affected component names/IDs, severity, CVSS estimate, evidence, attack path, exploitation-risk assessment, all mitigation actions and treatment status/justification. Hybrid findings also display structured DREAD dimensions and their independently calculated mean; legacy DREAD text remains in the attack path. CVSS measures severity, not exploitation probability. Missing legacy evidence, risk assessments or component detail are explicitly marked, never invented. CSV includes the complete ranked finding fields; JSON preserves the report data. PDF generation waits for the diagram and fonts before opening the browser's **Save as PDF** dialog; disable browser headers/footers for the cleanest result. Translation preserves canonical identifiers, scores, categories, severities and architecture so prioritization and coverage remain intact.
 
 Context budgets account for section headings, source labels, and truncation markers; **Inputs Analysed** counts only source characters retained, not those labels or markers. Document-digest requests share a limit of three simultaneous calls across documents, and each upload batch processes at most three files at once. Image-analysis cache keys hash the complete image (plus the source label for OCR), preventing different images with similar file headers from sharing results.
+
+### Evidence and review limitations
+
+GitHub trees and file reads use one immutable commit SHA; live repository metadata and release information remain collection-time snapshots. Sanitized original extracted text, sampled code and crawled page text are retained locally alongside generated digests, with SHA-256 text hashes, versions and parent-source links. Original attachment bytes have separate recorded hashes. OCR and vision remain generated interpretations. Bounded, deterministic retrieval supplies located primary excerpts beyond digests; retrieval or a matching quote does not prove deployment effectiveness.
+
+In **Evidence & Risk Review**, confirm the environment, version and scope, approve the business rubric, inspect located sources, assign owners and record ratings/actions. Add actual verification output under **Retained sources & verification artifacts**, select it for each passing test, then record an owned decision. Save scope/scenario/treatment changes before a fresh review: they invalidate previous ratings and verification. Semantic diagram edits also invalidate review; position-only changes do not. Stale concurrent saves are rejected and previous revisions are retained. Unsaved review drafts warn before navigation and cannot be exported as saved decisions.
+
+These are **local self-attestations**, not authenticated approvals, independent exploit verification or tamper-proof audit records. All assessments remain Review required. Architecture inventory starts Not assessed; comprehensive automated coverage/conflict/specialist analysis, a system-level release decision, full backup/import recovery and commercial comparative evaluation are not yet delivered. Protect/back up your browser profile before upgrading; an ordinary report export is not a full database/attachment backup.
+
+New JSON exports use `seidr-assessment-v1`; their published structural schema is `/schemas/assessment-v1.schema.json`. Run `pnpm run schema:assessment` after changing contracts. Runtime checks additionally enforce canonical IDs and source-manifest/lineage completeness. Source text and original attachments are excluded from routine exports; evidence quotes and metadata remain sensitive. Legacy exports are labelled `legacy-unverified-v0`.
 
 ## 🛡️ Architecture & Security Pipeline
 
@@ -50,7 +61,6 @@ Seidr is designed with a **local-first** approach for sensitive architecture dat
 - **AI Integrations**: 
   - Default: GitHub Copilot via the official Copilot SDK and local Node.js service
   - Optional providers: OpenAI, Google Gemini, Anthropic Claude, or local Ollama
-  - Search: Tavily API (for generating real-time mitigation strategies)
 
 ## ⚙️ Environment Variables
 
@@ -59,9 +69,6 @@ Copy `.env.example` to `.env` in the root of the project. The following variable
 ```env
 # Local Copilot service port (server-side only; default 3001)
 SEIDR_COPILOT_PORT=3001
-
-# Optional: Used by the Mitigation Strategist Agent to search the web for modern security practices
-VITE_TAVILY_API_KEY=your_tavily_key_here
 
 ```
 
@@ -129,13 +136,14 @@ A static-only deployment (including the existing Vercel configuration) cannot ru
 ### Tests
 
 ```bash
-pnpm test           # Copilot/GitHub bridges, crawler, C4, input/context handling, redo, local cache, Hybrid
+pnpm test           # Bridges, crawler, C4, ingestion, redo, quality contracts and exports
 pnpm test:copilot   # Copilot bridge and URL crawler only
 ```
 
 The crawler tests run against a local test server. The Copilot tests use a fake SDK client; they cover authentication failures, model selection, vision attachments, structured and text outputs, parallel mitigations, tool restrictions, and browser transport errors without spending Copilot quota.
 Input-processing tests cover exact context limits, per-source character counts, shared sanitization/document summaries, bounded digest failure recovery, ordered concurrent jobs, complete-image hashing, and document extraction. GitHub tests cover read-only access, private file transport, access failures and malformed responses. Redo tests preserve original attachments and isolate editable copies; cache tests prevent remote storage of private analysis. Hybrid prompt tests confirm the bundled protocol is loaded only for Hybrid TM.
 Report-export tests cover severity ordering, complete multiline CSV fields and mitigation lists, spreadsheet-formula protection, separate DREAD/CVSS scoring, component-level architecture selection, legacy gaps and translation without lost evidence or changed identifiers/scores.
+Quality tests cover exact source references, late-line primary retrieval, unknown risk, conservative scenario identity/reconciliation, stale-review invalidation, proof requirements and generated JSON-schema consistency. Mocked tests do not establish AI accuracy or commercial superiority.
 
 ## 📁 Project Structure
 

@@ -239,7 +239,7 @@ export function FindingsTab({
 
         <Card className="lg:col-span-2 bg-card border-border/50 shadow-sm">
           <CardHeader>
-            <CardTitle>Residual Coverage Heat Map</CardTitle>
+            <CardTitle>Recorded findings by category (not assessed coverage)</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>

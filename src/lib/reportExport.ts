@@ -1,12 +1,14 @@
 import type { ThreatModel } from './db';
 import type { ComplianceGap, SystemRepresentationGraph, Threat } from './backend/types';
 import { buildC4Mermaid, systemName, toC4Element, visibleComponents, visibleRelations } from './c4Model.ts';
+import { assessmentExportSchema, rateRisk, type EvidenceSource } from './backend/assessmentQuality.ts';
 
 export interface ExportReport extends ThreatModel {
   threats: Threat[];
   srg: SystemRepresentationGraph;
   complianceGaps: ComplianceGap[];
   uiStrings?: Record<string, string>;
+  evidenceManifest?: Omit<EvidenceSource, 'text'>[];
 }
 
 export const REPORT_STRINGS = {
@@ -181,14 +183,32 @@ export function buildFindingsCsv(model: ExportReport): string {
   const t = reportStrings(model);
   const headers = [t.priority, t.findingId, t.title, t.severity, `${t.cvss} / 10`, t.framework, t.category, t.component, t.affectedFlows,
     t.description, t.evidence, t.exploitationPath, t.suggestedMitigation, t.exploitationRisk,
-    ...DREAD_DIMENSIONS.map(key => `DREAD: ${t[key]} / 10`), `${t.dreadMean} / 10`, t.treatmentStatus, t.justification];
-  const rows = reportFindings(model).map(({ threat, priority, component, mitigations }) => [
+    ...DREAD_DIMENSIONS.map(key => `DREAD: ${t[key]} / 10`), `${t.dreadMean} / 10`, t.treatmentStatus, t.justification,
+    ...(model.quality ? ['Evidence status', 'Confidence level', 'Confidence rationale', 'Confirmed owner', 'Disposition',
+      'Current business risk', 'Current likelihood / 5', 'Current impact / 5', 'Current rationale', 'Inherent business risk',
+      'Conditional target business risk', 'Framework lenses', 'Located evidence', 'Recorded controls', 'Verification requests',
+      'Actions and tests', 'Owner decision', 'Rubric', 'System ID', 'Assessment revision', 'Scope', 'Environment', 'System version',
+      'Evidence cutoff', 'Collection and stage limitations', 'Source manifest'] : [])];
+  const findings = reportFindings(model);
+  const rows = findings.map(({ threat, priority, component, mitigations }) => [
     priority, threat.id, threat.title, t[severityKey(threat.severity)], scoreLabel(threat.cvssScore, t.notRecorded),
     model.framework, threat.category, component, (threat.affectedFlowIds || []).join('; ') || t.notRecorded, threat.description, threat.evidence, threat.reasoning,
     mitigations.join('\n\n') || t.noMitigation, threat.exploitationRisk || t.missingRisk,
     ...DREAD_DIMENSIONS.map(key => validScore(threat.dread?.[key], 1) ? threat.dread[key] : t.notRecorded),
     scoreLabel(dreadMean(threat), t.notRecorded), threat.status, threat.justification,
   ]);
+  if (model.quality) rows.forEach((row, index) => {
+    const quality = model.quality!;
+    const risk = quality.risks.find(risk => risk.id === findings[index].threat.id);
+    if (!risk) throw new Error('A finding is missing its canonical risk record.');
+    row.push(risk.evidenceStatus, risk.confidence.level, risk.confidence.reason, risk.owner, risk.disposition,
+      rateRisk(risk.current).band, risk.current.likelihood ?? t.notRecorded, risk.current.impact ?? t.notRecorded,
+      risk.current.rationale, rateRisk(risk.inherent).band, rateRisk(risk.target).band, risk.frameworkTags.join('; '),
+      JSON.stringify(risk.references), JSON.stringify(risk.controls), JSON.stringify(risk.missingEvidence),
+      JSON.stringify(risk.actions), JSON.stringify(risk.decision), quality.rubric.version, quality.systemId,
+      quality.revision, quality.scope, quality.environment, quality.systemVersion, quality.evidenceCutoff,
+      quality.stageIssues.join('\n'), JSON.stringify(model.evidenceManifest || []));
+  });
   const escape = (value: unknown) => {
     const text = value == null ? '' : String(value);
     // Repository and model text can be interpreted as spreadsheet formulas.
@@ -196,6 +216,24 @@ export function buildFindingsCsv(model: ExportReport): string {
     return `"${safe.replace(/"/g, '""')}"`;
   };
   return '\uFEFF' + [headers, ...rows].map(row => row.map(escape).join(',')).join('\r\n');
+}
+
+export function buildAssessmentExport(model: ExportReport, language = 'en') {
+  if (!model.quality) throw new Error('Legacy assessments have no versioned evidence/decision register. Use their explicitly labelled legacy export or redo them.');
+  const parsed = assessmentExportSchema.parse({
+    schemaVersion: 'seidr-assessment-v1',
+    metadata: { id: model.id, name: model.name, date: model.date, framework: model.framework || '', language },
+    assessment: model.quality, graph: model.srg, findings: model.threats, controlMappings: model.complianceGaps,
+    sourceManifest: model.evidenceManifest || [],
+  });
+  if (parsed.assessment.sourceIds.some(id => !parsed.sourceManifest.some(source => source.id === id))) throw new Error('Export source manifest is incomplete.');
+  if (parsed.sourceManifest.some(source => source.parentSourceIds.some(id => !parsed.sourceManifest.some(parent => parent.id === id)))) {
+    throw new Error('Export source lineage is incomplete.');
+  }
+  if (parsed.findings.length !== parsed.assessment.risks.length || parsed.findings.some(finding => !parsed.assessment.risks.some(risk => risk.id === finding.id))) {
+    throw new Error('Export findings and canonical risk register disagree.');
+  }
+  return parsed;
 }
 
 const TRANSLATABLE_THREAT_FIELDS = ['title', 'description', 'evidence', 'reasoning', 'mitigation', 'exploitationRisk', 'justification'] as const;

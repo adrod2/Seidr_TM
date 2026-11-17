@@ -19,6 +19,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { SeidrLogo } from './SeidrLogo';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
+import { assessmentSummary } from '@/lib/backend/assessmentQuality';
 
 const Sidebar = () => {
   const navItems = [
@@ -185,11 +186,9 @@ const Header = () => {
                           {model.id}
                         </span>
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                          model.riskScore >= 80 ? 'text-destructive bg-destructive/10' :
-                          model.riskScore >= 50 ? 'text-amber-500 bg-amber-500/10' :
-                          'text-emerald-500 bg-emerald-500/10'
+                          'text-muted-foreground bg-secondary'
                         }`}>
-                          Risk: {model.riskScore}
+                          {model.quality ? assessmentSummary(model.quality).highest : `Legacy / unverified: ${model.riskScore}`}
                         </span>
                       </div>
                     </button>

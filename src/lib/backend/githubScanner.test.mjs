@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { GITHUB_SCAN_LIMITS, parseGitHubUrl, scanGitHubRepository } from './githubScanner.ts';
 
 const api = 'https://api.github.com/repos/org/service';
+const revision = 'a'.repeat(40);
 const metadata = {
   full_name: 'org/service', default_branch: 'main', description: 'Warehouse robotics service',
   topics: ['robotics', 'warehouse'], homepage: 'https://docs.example.test', license: { spdx_id: 'MIT' },
@@ -19,13 +20,15 @@ const mockGitHub = (t, files, options = {}) => {
     calls.push(url);
     assert.ok(init.signal instanceof AbortSignal);
     if (url === api) return json(metadata, options.metadataStatus || 200);
+    if (url === `${api}/commits/main`) return json({ sha: options.revision ?? revision });
     if (url === `${api}/languages`) return json({ Python: 12345, TypeScript: 6789 }, options.languagesStatus || 200);
     if (url === `${api}/releases/latest`) return options.release
       ? json({ tag_name: 'v4.3', body: 'Release notes: device identity changed.' }) : json({}, 404);
     if (url.startsWith(`${api}/git/trees/`)) {
+      assert.equal(url, `${api}/git/trees/${revision}?recursive=1`);
       return json({ tree: files.map(file => ({ type: 'blob', path: file.path, size: file.text.length })), truncated: options.truncated }, options.treeStatus || 200);
     }
-    const prefix = 'https://raw.githubusercontent.com/org/service/main/';
+    const prefix = `https://raw.githubusercontent.com/org/service/${revision}/`;
     if (url.startsWith(prefix)) {
       const path = url.slice(prefix.length).split('/').map(decodeURIComponent).join('/');
       const file = files.find(file => file.path === path);
@@ -136,4 +139,21 @@ test('GitHub parser accepts repository URLs and rejects unsupported providers', 
   assert.equal(parseGitHubUrl('not a URL'), null);
   assert.equal(parseGitHubUrl('https://gitlab.com/org/service'), null);
   assert.equal(parseGitHubUrl('ftp://github.com/org/service'), null);
+});
+
+test('all sampled files retain immutable versions while mutable metadata stays explicitly separate', async t => {
+  const calls = mockGitHub(t, [{ path: 'README.md', text: 'Design' }, { path: 'api/auth.ts', text: 'authorize()' }]);
+  const result = await scanGitHubRepository('org', 'service');
+  assert.equal(calls.filter(url => url === `${api}/commits/main`).length, 1);
+  assert.ok(result.contextSources.filter(source => source.kind !== 'metadata').every(source => source.revision === revision));
+  assert.equal(result.contextSources.find(source => source.kind === 'code').text, 'authorize()');
+  assert.ok(result.contextSources.filter(source => source.kind === 'metadata').every(source => !source.revision));
+  assert.ok(result.contextSources.every(source => Number.isFinite(Date.parse(source.collectedAt))));
+  assert.match(result.contextString, new RegExp(revision));
+});
+
+test('invalid commit lookup cannot silently fall back to reading a moving branch', async t => {
+  const calls = mockGitHub(t, [], { revision: 'main' });
+  await assert.rejects(scanGitHubRepository('org', 'service'), /immutable commit/);
+  assert.ok(!calls.some(url => url.includes('/git/trees/') || url.includes('raw.githubusercontent.com')));
 });

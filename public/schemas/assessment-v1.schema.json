@@ -1,0 +1,1117 @@
+{
+  "$ref": "#/definitions/SeidrAssessment",
+  "definitions": {
+    "SeidrAssessment": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "string",
+          "const": "seidr-assessment-v1"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "name": {
+              "type": "string"
+            },
+            "date": {
+              "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+            },
+            "framework": {
+              "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+            },
+            "language": {
+              "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "date",
+            "framework",
+            "language"
+          ],
+          "additionalProperties": false
+        },
+        "assessment": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "number",
+              "const": 1
+            },
+            "revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "systemId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "parentAssessmentId": {
+              "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+            },
+            "evidenceCutoff": {
+              "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+            },
+            "rubric": {
+              "type": "object",
+              "properties": {
+                "version": {
+                  "type": "string",
+                  "const": "seidr-5x5-v1"
+                },
+                "approvedBy": {
+                  "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                },
+                "approvedAt": {
+                  "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                }
+              },
+              "required": [
+                "version",
+                "approvedBy",
+                "approvedAt"
+              ],
+              "additionalProperties": false
+            },
+            "scope": {
+              "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+            },
+            "environment": {
+              "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+            },
+            "systemVersion": {
+              "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+            },
+            "promptVersion": {
+              "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+            },
+            "sourceIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+              }
+            },
+            "risks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "scenario": {
+                    "type": "object",
+                    "properties": {
+                      "actor": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      },
+                      "preconditions": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      },
+                      "action": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      },
+                      "asset": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      },
+                      "consequence": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      }
+                    },
+                    "required": [
+                      "actor",
+                      "preconditions",
+                      "action",
+                      "asset",
+                      "consequence"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "frameworkTags": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                    }
+                  },
+                  "evidenceStatus": {
+                    "type": "string",
+                    "enum": [
+                      "Observed",
+                      "Documented but unverified",
+                      "Hypothesis",
+                      "Not assessed"
+                    ]
+                  },
+                  "confidence": {
+                    "type": "object",
+                    "properties": {
+                      "level": {
+                        "type": "string",
+                        "enum": [
+                          "Low",
+                          "Medium",
+                          "High"
+                        ]
+                      },
+                      "reason": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      }
+                    },
+                    "required": [
+                      "level",
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "references": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "sourceId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "startLine": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "endLine": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "quote": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "sourceId",
+                        "startLine",
+                        "endLine",
+                        "quote"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "owner": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "disposition": {
+                    "type": "string",
+                    "enum": [
+                      "Blocker",
+                      "Owner acceptance required",
+                      "Proposed acceptance",
+                      "Accepted risk",
+                      "Closed with evidence"
+                    ]
+                  },
+                  "inherent": {
+                    "type": "object",
+                    "properties": {
+                      "likelihood": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 5
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "impact": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/risks/items/properties/inherent/properties/likelihood"
+                      },
+                      "rationale": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      },
+                      "reviewer": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      }
+                    },
+                    "required": [
+                      "likelihood",
+                      "impact",
+                      "rationale",
+                      "reviewer"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "current": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/risks/items/properties/inherent"
+                  },
+                  "target": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/risks/items/properties/inherent"
+                  },
+                  "controls": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "Current",
+                            "Proposed",
+                            "Planned",
+                            "Assumed"
+                          ]
+                        },
+                        "verified": {
+                          "type": "boolean"
+                        },
+                        "artifactSourceIds": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                          }
+                        }
+                      },
+                      "required": [
+                        "description",
+                        "state",
+                        "verified",
+                        "artifactSourceIds"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "missingEvidence": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "question": {
+                          "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                        },
+                        "supplier": {
+                          "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                        },
+                        "verification": {
+                          "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                        },
+                        "resolved": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "artifactSourceIds": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                          },
+                          "default": []
+                        }
+                      },
+                      "required": [
+                        "question",
+                        "supplier",
+                        "verification"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "description": {
+                          "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                        },
+                        "owner": {
+                          "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                        },
+                        "proposedOwner": {
+                          "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name",
+                          "default": ""
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": [
+                            "Before launch",
+                            "High",
+                            "Normal"
+                          ]
+                        },
+                        "milestone": {
+                          "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                        },
+                        "dependencies": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                          }
+                        },
+                        "requirements": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                          }
+                        },
+                        "acceptanceTest": {
+                          "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                        },
+                        "expectedArtifact": {
+                          "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                        },
+                        "incompleteRisk": {
+                          "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "Open",
+                            "In Progress",
+                            "Awaiting verification",
+                            "Verified"
+                          ]
+                        },
+                        "verification": {
+                          "type": "object",
+                          "properties": {
+                            "result": {
+                              "type": "string",
+                              "enum": [
+                                "Not run",
+                                "Pass",
+                                "Fail"
+                              ]
+                            },
+                            "artifactSourceIds": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                              }
+                            },
+                            "reviewer": {
+                              "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                            },
+                            "at": {
+                              "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                            },
+                            "environment": {
+                              "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                            }
+                          },
+                          "required": [
+                            "result",
+                            "artifactSourceIds",
+                            "reviewer",
+                            "at",
+                            "environment"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "description",
+                        "owner",
+                        "priority",
+                        "milestone",
+                        "dependencies",
+                        "requirements",
+                        "acceptanceTest",
+                        "expectedArtifact",
+                        "incompleteRisk",
+                        "status",
+                        "verification"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "decision": {
+                    "type": "object",
+                    "properties": {
+                      "owner": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      },
+                      "rationale": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      },
+                      "at": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      },
+                      "expiresAt": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      },
+                      "reviewTrigger": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      }
+                    },
+                    "required": [
+                      "owner",
+                      "rationale",
+                      "at",
+                      "expiresAt",
+                      "reviewTrigger"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "reviewTrigger": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "issues": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                    }
+                  },
+                  "observationIds": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "scenario",
+                  "frameworkTags",
+                  "evidenceStatus",
+                  "confidence",
+                  "references",
+                  "owner",
+                  "disposition",
+                  "inherent",
+                  "current",
+                  "target",
+                  "controls",
+                  "missingEvidence",
+                  "actions",
+                  "decision",
+                  "reviewTrigger",
+                  "issues",
+                  "observationIds"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "coverage": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "Component",
+                      "Flow",
+                      "Sensitive destination",
+                      "Integration",
+                      "Specialist check"
+                    ]
+                  },
+                  "name": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "Examined",
+                      "Not applicable",
+                      "Out of scope",
+                      "Blocked",
+                      "Not assessed"
+                    ]
+                  },
+                  "rationale": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "owner": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "references": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/risks/items/properties/references/items"
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "kind",
+                  "name",
+                  "state",
+                  "rationale",
+                  "owner",
+                  "references"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "conflicts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "riskIds": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                    }
+                  },
+                  "description": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "references": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/risks/items/properties/references/items"
+                    }
+                  },
+                  "owner": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "verification": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "resolved": {
+                    "type": "boolean"
+                  },
+                  "resolution": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  }
+                },
+                "required": [
+                  "id",
+                  "riskIds",
+                  "description",
+                  "references",
+                  "owner",
+                  "verification",
+                  "resolved",
+                  "resolution"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "observations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "originalId": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "category": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "riskId": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "finding": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "description": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "category": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "componentId": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      },
+                      "affectedComponentIds": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                        }
+                      },
+                      "affectedFlowIds": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                        }
+                      },
+                      "cvssScore": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 10
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "Critical",
+                          "High",
+                          "Medium",
+                          "Low"
+                        ]
+                      },
+                      "evidence": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      },
+                      "reasoning": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      },
+                      "exploitationRisk": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      },
+                      "mitigation": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      },
+                      "mitigations": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                        }
+                      },
+                      "status": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      },
+                      "justification": {
+                        "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                      },
+                      "dread": {
+                        "type": "object",
+                        "properties": {
+                          "damage": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 10
+                          },
+                          "reproducibility": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 10
+                          },
+                          "exploitability": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 10
+                          },
+                          "affectedUsers": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 10
+                          },
+                          "discoverability": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 10
+                          }
+                        },
+                        "required": [
+                          "damage",
+                          "reproducibility",
+                          "exploitability",
+                          "affectedUsers",
+                          "discoverability"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "qualityProposal": {
+                        "type": "object",
+                        "properties": {
+                          "scenario": {
+                            "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/risks/items/properties/scenario"
+                          },
+                          "frameworkTags": {
+                            "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/risks/items/properties/frameworkTags"
+                          },
+                          "evidenceStatus": {
+                            "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/risks/items/properties/evidenceStatus"
+                          },
+                          "confidence": {
+                            "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/risks/items/properties/confidence"
+                          },
+                          "references": {
+                            "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/risks/items/properties/references"
+                          },
+                          "controls": {
+                            "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/risks/items/properties/controls"
+                          },
+                          "missingEvidence": {
+                            "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/risks/items/properties/missingEvidence"
+                          }
+                        },
+                        "required": [
+                          "scenario",
+                          "frameworkTags",
+                          "evidenceStatus",
+                          "confidence",
+                          "references",
+                          "controls",
+                          "missingEvidence"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "title",
+                      "description",
+                      "category",
+                      "componentId",
+                      "cvssScore",
+                      "severity"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "originalId",
+                  "category",
+                  "riskId",
+                  "finding"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "reconciliation": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "riskId": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "observationIds": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                    }
+                  },
+                  "reason": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  }
+                },
+                "required": [
+                  "riskId",
+                  "observationIds",
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "stageIssues": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+              }
+            },
+            "history": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "actor": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "event": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "riskId": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "previousHash": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  }
+                },
+                "required": [
+                  "at",
+                  "actor",
+                  "event",
+                  "riskId",
+                  "previousHash"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "revision",
+            "systemId",
+            "parentAssessmentId",
+            "evidenceCutoff",
+            "rubric",
+            "scope",
+            "environment",
+            "systemVersion",
+            "promptVersion",
+            "sourceIds",
+            "risks",
+            "coverage",
+            "conflicts",
+            "observations",
+            "reconciliation",
+            "stageIssues",
+            "history"
+          ],
+          "additionalProperties": false
+        },
+        "graph": {
+          "type": "object",
+          "properties": {
+            "components": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "Process",
+                      "DataStore",
+                      "ExternalEntity",
+                      "DataFlow"
+                    ]
+                  },
+                  "c4Type": {
+                    "type": "string",
+                    "enum": [
+                      "Person",
+                      "System",
+                      "Container",
+                      "Database",
+                      "Component"
+                    ]
+                  },
+                  "c4Level": {
+                    "type": "string",
+                    "enum": [
+                      "L1",
+                      "L2",
+                      "L3",
+                      "Global"
+                    ]
+                  },
+                  "description": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "technology": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "external": {
+                    "type": "boolean"
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "type",
+                  "description"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "edges": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sourceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "targetId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "protocol": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "label": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  },
+                  "dataClassification": {
+                    "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                  }
+                },
+                "required": [
+                  "id",
+                  "sourceId",
+                  "targetId"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "trustBoundaries": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+              }
+            }
+          },
+          "required": [
+            "components",
+            "edges",
+            "trustBoundaries"
+          ],
+          "additionalProperties": false
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/observations/items/properties/finding"
+          }
+        },
+        "controlMappings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "controlId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "Met",
+                  "Partially Met",
+                  "Gap Identified"
+                ]
+              },
+              "description": {
+                "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+              }
+            },
+            "required": [
+              "controlId",
+              "title",
+              "status",
+              "description"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "sourceManifest": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "minLength": 1
+              },
+              "contentHash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "collectedAt": {
+                "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+              },
+              "version": {
+                "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+              },
+              "derived": {
+                "type": "boolean"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "Complete",
+                  "Partial",
+                  "Unavailable"
+                ]
+              },
+              "note": {
+                "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+              },
+              "parentSourceIds": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/SeidrAssessment/properties/metadata/properties/name"
+                },
+                "default": []
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "kind",
+              "contentHash",
+              "collectedAt",
+              "version",
+              "derived",
+              "status",
+              "note"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "metadata",
+        "assessment",
+        "graph",
+        "findings",
+        "controlMappings",
+        "sourceManifest"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

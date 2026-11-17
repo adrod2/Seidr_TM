@@ -12,6 +12,7 @@ export interface ContextSection {
   text: string;
   /** Short qualifier shown in the section header, e.g. "PDF, 12 pages, security digest". */
   detail?: string;
+  sourceId?: string;
 }
 
 export interface InputStatus {
@@ -106,7 +107,7 @@ export function assembleContext(sections: ContextSection[], budget = CONTEXT_BUD
   const kept = sections.map(() => 0);
   const usable = sections.map((s, index) => ({
     ...s, index, text: s.text.trim(),
-    header: s.kind === 'description' ? '' : `--- ${s.name}${s.detail ? ` (${s.detail})` : ''} ---\n`,
+    header: `${s.kind === 'description' ? '' : `--- ${s.name}${s.detail ? ` (${s.detail})` : ''} ---\n`}${s.sourceId ? `[Source ID: ${s.sourceId}; line numbers refer to this source's retained text.]\n` : ''}`,
   })).filter(s => s.text);
   const groups = GROUP_ORDER.map(kind => ({
     title: `=== ${GROUP_TITLES[kind]} ===`,

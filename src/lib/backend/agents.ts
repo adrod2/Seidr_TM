@@ -10,6 +10,18 @@ import { prepareRepositorySources } from './repositoryInputs';
 import hybridMethodText from './hybrid-method.md?raw';
 import { buildThreatModelPrompt } from './threatModelPrompt';
 import { mergeReportTranslation, reportTranslationPayload, type ExportReport } from '../reportExport';
+import { assessmentExportSchema, graphSchema, mitigationProposalSchema, parseThreats } from './assessmentQuality';
+
+async function validatedResponse<T>(systemPrompt: string, input: string, parse: (value: unknown) => T): Promise<T> {
+  let correction = '';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try { return parse(await callLLM(systemPrompt, input + correction)); } catch (error) {
+      if (attempt === 1) throw error;
+      correction = `\nThe prior response failed structural validation: ${getErrorMessage(error)}. Correct the JSON structure using only supplied evidence; do not invent facts to satisfy required fields.`;
+    }
+  }
+  throw new Error('Agent response validation did not complete.');
+}
 
 /**
  * Diagram Analysis Agent: Uses Vision LLMs to extract dense textual architecture details from an image.
@@ -33,9 +45,9 @@ export const agentAnalyzeDiagram = async (base64DataUrl: string): Promise<string
  * C4 Architecture Agent: Converts raw system descriptions into a highly structured C4 System Representation Graph (SRG).
  */
 export const agentC4Architect = async (sanitisedInput: string): Promise<SystemRepresentationGraph> => {
-  const hash = await hashInput(sanitisedInput);
+  const hash = await hashInput(`architecture-schema-v1_${sanitisedInput}`);
   const cached = await getCachedResult<SystemRepresentationGraph>('c4Architect', hash);
-  if (cached) return cached;
+  if (cached) { graphSchema.parse(cached); return cached; }
 
   const systemPrompt = `You are an expert software architect specializing in the C4 model. 
 Given the comprehensive system context, extract MAXIMUM details to build Level 1 (System Context), Level 2 (Container), and Level 3 (Component) diagrams.
@@ -75,10 +87,13 @@ Return ONLY a valid JSON object with this EXACT structure:
   "trustBoundaries": [ "Internet", "VPC" ]
 }`;
 
-  const result = await callLLM(systemPrompt, `System Context:\n${sanitisedInput}`);
+  const result = await validatedResponse(systemPrompt, `System Context:\n${sanitisedInput}`, value => {
+    graphSchema.parse(value);
+    return value as SystemRepresentationGraph;
+  });
   
   await setCachedResult('c4Architect', hash, result);
-  return result as SystemRepresentationGraph;
+  return result;
 };
 
 /**
@@ -91,15 +106,15 @@ export const agentRepositoryAnalysis = async (repositoryUrl: string, context: st
     contextSources: [{ kind: 'metadata' as const, name: 'Repository URL only', url: repositoryUrl, text: `Repository URL: ${repositoryUrl}. No repository metadata, files or documentation were fetched for this non-GitHub provider.` }],
     collectionNotes: ['Non-GitHub provider: file and documentation collection is unavailable. No live DAST was performed.'],
   };
-  const hash = await hashInput(`repository-context-v3_${repositoryUrl}_${context}_${JSON.stringify(scanData)}`);
+  const hash = await hashInput(`repository-context-v4_${repositoryUrl}_${context}_${JSON.stringify(scanData)}`);
   const cached = await getCachedResult<RepositoryAnalysis>('repoAnalysis', hash);
-  if (cached) return cached;
+  if (cached) { parseThreats(cached.inherentVulnerabilities); return cached; }
 
   const contextSources = await prepareRepositorySources(scanData.contextSources, agentDocumentDigest);
   const code = sanitiseSection(scanData.contextString);
   const collectionNotes = [...scanData.collectionNotes];
   if (!code.passed) collectionNotes.push(`Code sample excluded by the prompt-injection gate: ${code.reason}`);
-  const repositoryContext = assembleContext(contextSources.filter(source => source.text).map(source => ({
+  const repositoryContext = assembleContext(contextSources.filter(source => source.text && source.kind !== 'code').map(source => ({
     kind: 'repository', name: `${source.kind}: ${source.url}`, detail: source.name, text: source.text,
   })), 120_000).text;
   const repoContext = `Repository URL: ${repositoryUrl}\nSystem context:\n${context}\n\n${code.text}\n\n${repositoryContext}`;
@@ -144,6 +159,7 @@ Return ONLY a valid JSON object with this EXACT structure:
     if (typeof result?.inferredPurpose !== 'string' || !Array.isArray(result?.inherentVulnerabilities)) {
       throw new Error('Repository analysis returned an invalid response.');
     }
+    result.inherentVulnerabilities = parseThreats(result.inherentVulnerabilities);
   } catch (error) {
     console.warn(`Static repository analysis failed for ${repositoryUrl}; retaining collected context.`, error);
     return {
@@ -163,89 +179,33 @@ Return ONLY a valid JSON object with this EXACT structure:
  */
 export const agentThreatModeling = async (srg: SystemRepresentationGraph, framework: string, systemContext: string): Promise<Threat[]> => {
   const systemPrompt = buildThreatModelPrompt(framework, hybridMethodText);
-  const hash = await hashInput(`${systemPrompt}_${JSON.stringify(srg)}_${systemContext}`);
+  const hash = await hashInput(`required-evidence-v2_${systemPrompt}_${JSON.stringify(srg)}_${systemContext}`);
   const cached = await getCachedResult<Threat[]>('threatModeling', hash);
-  if (cached) return cached;
+  if (cached) return parseThreats(cached, true);
 
   const promptInput = `System Context:\n${systemContext}\n\nSRG Data:\n${JSON.stringify(srg, null, 2)}`;
-  const threatsData = await callLLM(systemPrompt, promptInput);
-  
-  const threats = (threatsData as Threat[]).sort((a, b) => b.cvssScore - a.cvssScore);
+  const threats = (await validatedResponse(systemPrompt, promptInput, value => parseThreats(value, true))).sort((a, b) => b.cvssScore - a.cvssScore);
   
   await setCachedResult('threatModeling', hash, threats);
   return threats;
 };
 
 /**
- * Mitigation Agent: Searches the web and system context to generate tailored mitigation strategies for specific threats.
+ * Mitigation Agent: Proposes testable actions; ownership and verification need local review.
  */
-export const agentMitigationStrategist = async (threat: Threat, systemContext: string): Promise<string> => {
-  const hash = await hashInput(`mitigation_${threat.id}_${systemContext}`);
-  const cached = await getCachedResult<string>('mitigationStrategy', hash);
-  if (cached) return cached;
-
-  let searchContext = '';
-  try {
-    const apiKey = import.meta.env.VITE_TAVILY_API_KEY;
-    if (apiKey) {
-      const response = await fetch('https://api.tavily.com/search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          query: `How to mitigate ${threat.title} vulnerability ${threat.category} best practices technical implementation`,
-          search_depth: 'basic',
-          include_answer: false,
-          include_images: false,
-          include_raw_content: false,
-          max_results: 3
-        })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        searchContext = data.results?.map((r: { content: string }) => r.content).join('\n') || '';
-      } else {
-        console.warn('Tavily API returned an error:', await response.text());
-      }
-    } else {
-      console.warn('Tavily API key not found, skipping web search.');
-    }
-  } catch (error) {
-    console.warn('Tavily search failed, falling back to LLM knowledge:', error);
-  }
-
-  const systemPrompt = `You are an expert Application Security Engineer specializing in actionable threat mitigation.
-Given a specific threat from a threat model and the broader system context, provide a highly tailored, step-by-step mitigation strategy.
-
-Context Rules:
-1. Ground your advice in the provided System Context (technologies, frameworks).
-2. Incorporate modern best practices, drawing from the provided Web Search Context if available.
-3. Be specific. Do not say "implement secure logging". Instead say "Configure your Node.js backend to use Winston for structured JSON logging, sending logs to AWS CloudWatch via an IAM role with restricted put-only permissions."
-
-Return ONLY a raw string (no markdown formatting, no JSON, just the text) containing the tailored mitigation plan. Keep it between 3 and 5 sentences.`;
-
-  const promptInput = `
-Threat Title: ${threat.title}
-Threat Category: ${threat.category}
-Component Affected: ${threat.componentId}
-Threat Description: ${threat.description}
-
-System Architecture Context:
-${systemContext}
-
-Recent Web Research on Mitigation:
-${searchContext}
-  `;
-
-  const result = await callLLM(systemPrompt, promptInput, 'text');
-  
-  const cleanedResult = typeof result === 'string' ? result.replace(/^["']|["']$/g, '') : JSON.stringify(result);
-  
-  await setCachedResult('mitigationStrategy', hash, cleanedResult);
-  return cleanedResult;
+export const agentMitigationStrategist = async (threat: Threat, systemContext: string) => {
+  const hash = await hashInput(`structured-mitigation-v1_${JSON.stringify(threat)}_${systemContext}`);
+  const cached = await getCachedResult<unknown>('mitigationStrategy', hash);
+  if (cached) return mitigationProposalSchema.parse(cached);
+  const systemPrompt = `You are an application security engineer proposing actionable, testable risk treatment.
+Use only the supplied architecture and evidence; do not invent technology, implemented controls, teams, compliance mappings or successful verification.
+Proposed owners are role suggestions, not confirmed assignments. Include cross-team/external dependencies and explicit unknowns.
+Every recommendation needs a concrete pass/fail test and expected evidence artifact. High/Critical blockers need a before-launch gate.
+Return only JSON:
+{"narrative":"Technical mitigation explanation","actions":[{"description":"Concrete control or decision","proposedOwner":"Suggested accountable role, not a confirmed person","priority":"Before launch | High | Normal","milestone":"Specific implementation/decision gate","dependencies":["Dependency or required decision"],"requirements":["Requirement IDs only when supplied"],"acceptanceTest":"Reproducible pass/fail test including negative/failure cases","expectedArtifact":"Test/control evidence to retain","incompleteRisk":"Risk remaining if the action is incomplete"}]}`;
+  const result = await validatedResponse(systemPrompt, `Finding:\n${JSON.stringify(threat)}\n\nContext:\n${systemContext}`, value => mitigationProposalSchema.parse(value));
+  await setCachedResult('mitigationStrategy', hash, result);
+  return result;
 };
 
 /**
@@ -253,6 +213,7 @@ ${searchContext}
  */
 export const agentCompliance = async (threats: Threat[], customControlsContext?: string): Promise<ComplianceGap[]> => {
   const systemPrompt = `You are a compliance expert. Given these identified threats, map them to missing or partially met security controls.
+These are proposed review mappings, not certifications or proof that a deployed control failed. Do not invent implemented controls, applicable obligations or an overall compliance score.
 ${customControlsContext 
   ? `CRITICAL INSTRUCTION: You MUST ONLY evaluate compliance against the following specific mandatory controls provided in the organizational context:\n\n${customControlsContext}\n\nDo NOT use any other controls outside of this list.` 
   : `Map them to missing NIST SP 800-53 controls.`}
@@ -270,8 +231,8 @@ Return ONLY a valid JSON array of objects with this EXACT structure:
   // Provide the LLM with the threat details to find the gaps
   const promptData = `Identified Threats:\n${JSON.stringify(threats.map(t => ({ id: t.id, title: t.title, component: t.componentId, description: t.description })), null, 2)}`;
   
-  const gapsData = await callLLM(systemPrompt, promptData);
-  return gapsData as ComplianceGap[];
+  const gaps = await validatedResponse(systemPrompt, promptData, value => assessmentExportSchema.shape.controlMappings.parse(value));
+  return gaps.map(gap => ({ controlId: gap.controlId, title: gap.title, status: gap.status, description: gap.description }));
 };
 
 /**
@@ -341,7 +302,8 @@ Only state facts supported by the pages, and cite the page index like [1] after 
   return {
     sourceUrl: crawl.rootUrl,
     summary: summary.trim(),
-    pages: pages.map(({ url: pageUrl, title }) => ({ url: pageUrl, title })),
+    pages: pages.map(({ url: pageUrl, title, text }) => ({ url: pageUrl, title, text })),
+    collectedAt: new Date().toISOString(),
     skippedPages,
   };
 };

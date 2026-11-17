@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Calendar, ShieldAlert, ArrowRight, Activity, Clock, Loader2 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
+import { assessmentSummary } from '@/lib/backend/assessmentQuality';
 
 export const ModelsList = () => {
   const models = useLiveQuery(() => db.threatModels.orderBy('date').reverse().toArray());
@@ -49,11 +50,9 @@ export const ModelsList = () => {
                     <ShieldAlert className="h-6 w-6" />
                   </div>
                   <div className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                    model.riskScore > 80 ? 'bg-destructive/10 text-destructive' :
-                    model.riskScore > 50 ? 'bg-amber-500/10 text-amber-500' :
-                    'bg-emerald-500/10 text-emerald-500'
+                    'bg-secondary text-muted-foreground'
                   }`}>
-                    Risk Score: {model.riskScore}
+                    {model.quality ? `Current risk: ${assessmentSummary(model.quality).highest}` : `Legacy score (unverified): ${model.riskScore}`}
                   </div>
                 </div>
                 

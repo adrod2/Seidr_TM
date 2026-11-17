@@ -54,6 +54,7 @@ export interface Threat {
   };
   status?: string;
   justification?: string;
+  qualityProposal?: import('./assessmentQuality').RiskProposal;
 }
 
 export interface ComplianceGap {
@@ -71,10 +72,13 @@ export interface ScannedFile {
 }
 
 export interface RepositorySource {
-  kind: 'metadata' | 'documentation';
+  kind: 'metadata' | 'documentation' | 'code';
   name: string;
   url: string;
   text: string;
+  originalText?: string;
+  revision?: string;
+  collectedAt?: string;
   sourceChars?: number;
   status?: 'included' | 'digested' | 'truncated' | 'excluded' | 'failed' | 'empty';
   note?: string;
@@ -92,7 +96,8 @@ export interface RepositoryAnalysis {
 export interface WebIntelligence {
   sourceUrl: string;
   summary: string;
-  pages: { url: string; title: string }[];
+  pages: { url: string; title: string; text?: string }[];
+  collectedAt?: string;
   skippedPages: number;
 }
 

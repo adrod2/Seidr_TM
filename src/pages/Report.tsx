@@ -17,14 +17,22 @@ import { CopilotSidebar } from '@/components/report/CopilotSidebar';
 import { PrintReport } from '@/components/report/PrintReport';
 import { TabButton } from '@/components/TabButton';
 import { agentTranslateReport } from '@/lib/backend/agents';
-import { buildFindingsCsv, prioritizeThreats, renderReportDiagram, type ExportReport } from '@/lib/reportExport';
+import { buildAssessmentExport, buildFindingsCsv, prioritizeThreats, renderReportDiagram, type ExportReport } from '@/lib/reportExport';
 import { getErrorMessage } from '@/lib/backend/inputUtils';
+import { AssessmentReview } from '@/components/report/AssessmentReview';
+import { assessmentSummary } from '@/lib/backend/assessmentQuality';
 
 export const Report = () => {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState('findings');
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
   const [selectedThreatId, setSelectedThreatId] = useState<string | null>(null);
+  const reviewDirty = React.useRef(false);
+  const handleReviewDirty = React.useCallback((dirty: boolean) => { reviewDirty.current = dirty; }, []);
+  const changeTab = (tab: string) => {
+    if (reviewDirty.current && !window.confirm('Leave without saving this review draft?')) return;
+    setActiveTab(tab);
+  };
   const handleThreatSelect = React.useCallback((threatId: string) => {
     setSelectedThreatId(threatId);
     setActiveTab('threats');
@@ -68,13 +76,15 @@ export const Report = () => {
     return { label: 'Low', color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' };
   };
 
-  const riskBadge = getRiskLevel(modelData.riskScore);
+  const riskBadge = modelData.quality
+    ? { label: assessmentSummary(modelData.quality).highest, color: 'text-primary bg-primary/10 border-primary/20' }
+    : getRiskLevel(modelData.riskScore);
   const formattedDate = new Date(modelData.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
   const exportFormats = [
     { id: 'pdf', label: 'Complete PDF Report (Summary, C4 & Findings)' },
     { id: 'csv', label: 'CSV (Complete Findings)' },
-    { id: 'json', label: 'JSON (Raw Data)' }
+    { id: 'json', label: modelData.quality ? 'JSON (Versioned Evidence & Decision Record)' : 'JSON (Legacy / Unverified Data)' }
   ];
 
   const exportLanguages = [
@@ -88,6 +98,7 @@ export const Report = () => {
 
   const handleExport = async () => {
     if (isExporting) return;
+    if (reviewDirty.current) { toast.error('Save the review draft before exporting the recorded assessment.'); return; }
     setIsExportModalOpen(false);
     setIsExporting(true);
     const langLabel = exportLanguages.find(l => l.id === exportLanguage)?.label || 'English';
@@ -95,7 +106,11 @@ export const Report = () => {
       ? 'Preparing complete report...'
       : `Translating report to ${langLabel}...`);
     try {
-      const dataToExport = exportLanguage === 'en' ? modelData : await agentTranslateReport(modelData, langLabel);
+      const sourceRecords = modelData.quality ? await db.evidenceSources.bulkGet(modelData.quality.sourceIds) : [];
+      if (sourceRecords.some(source => source === undefined)) throw new Error('Some recorded source snapshots are unavailable. Restore them before issuing a complete report.');
+      const evidenceManifest = sourceRecords.filter(source => source !== undefined).map(({ text: _text, ...metadata }) => metadata);
+      const exportData = { ...modelData, evidenceManifest };
+      const dataToExport = exportLanguage === 'en' ? exportData : await agentTranslateReport(exportData, langLabel);
       if (exportFormat === 'pdf') {
         const diagramSvg = await renderReportDiagram(dataToExport);
         flushSync(() => setPreparedPrint({ data: dataToExport, diagramSvg }));
@@ -112,7 +127,8 @@ export const Report = () => {
         }
       } else {
         const content = exportFormat === 'csv' ? buildFindingsCsv(dataToExport)
-          : JSON.stringify({ ...dataToExport, threats: prioritizeThreats(dataToExport.threats), exportLanguage }, null, 2);
+          : JSON.stringify(dataToExport.quality ? buildAssessmentExport(dataToExport, exportLanguage)
+            : { schemaVersion: 'legacy-unverified-v0', ...dataToExport, threats: prioritizeThreats(dataToExport.threats), exportLanguage }, null, 2);
         const blob = new Blob([content], { type: exportFormat === 'csv' ? 'text/csv;charset=utf-8;' : 'application/json' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -141,7 +157,7 @@ export const Report = () => {
             <div className="flex items-center gap-3 mb-1">
               <h2 className="text-2xl font-bold">{modelData.name}</h2>
               <span className={`${riskBadge.color} text-xs font-bold px-2.5 py-1 rounded-full border`}>
-                Risk: {riskBadge.label} ({modelData.riskScore})
+                {modelData.quality ? `Current business risk: ${riskBadge.label}` : `Legacy score (unverified): ${modelData.riskScore}`}
               </span>
             </div>
             <p className="text-muted-foreground text-sm flex items-center gap-2">
@@ -163,7 +179,10 @@ export const Report = () => {
               AI Copilot
             </button>
             <button 
-              onClick={() => toast.success('Report link copied to clipboard')}
+              onClick={async () => {
+                try { await navigator.clipboard.writeText(window.location.href); toast.success('Local report link copied. It opens only where this assessment is stored.'); }
+                catch (error) { console.error('Report link copy failed', error); toast.error('The report link could not be copied.'); }
+              }}
               className="bg-secondary/50 text-foreground px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-secondary transition-all"
             >
               <Share2 className="h-4 w-4" />
@@ -181,20 +200,25 @@ export const Report = () => {
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none shrink-0">
-          <TabButton active={activeTab === 'findings'} onClick={() => setActiveTab('findings')} icon={LayoutDashboard} label="Findings" />
-          <TabButton active={activeTab === 'threats'} onClick={() => setActiveTab('threats')} icon={ShieldAlert} label="Threat Catalog" />
-          <TabButton active={activeTab === 'c4'} onClick={() => setActiveTab('c4')} icon={GitMerge} label="C4 Architecture" />
-          <TabButton active={activeTab === 'mitigations'} onClick={() => setActiveTab('mitigations')} icon={CheckSquare} label="Mitigation Plan" />
-          <TabButton active={activeTab === 'compliance'} onClick={() => setActiveTab('compliance')} icon={FileCheck} label="Compliance" />
+          <TabButton active={activeTab === 'findings'} onClick={() => changeTab('findings')} icon={LayoutDashboard} label="Findings" />
+          <TabButton active={activeTab === 'threats'} onClick={() => changeTab('threats')} icon={ShieldAlert} label="Threat Catalog" />
+          <TabButton active={activeTab === 'c4'} onClick={() => changeTab('c4')} icon={GitMerge} label="C4 Architecture" />
+          <TabButton active={activeTab === 'mitigations'} onClick={() => changeTab('mitigations')} icon={CheckSquare} label="Mitigation Plan" />
+          <TabButton active={activeTab === 'compliance'} onClick={() => changeTab('compliance')} icon={FileCheck} label="Compliance" />
+          {modelData.quality && <TabButton active={activeTab === 'review'} onClick={() => changeTab('review')} icon={FileCheck} label="Evidence & Risk Review" />}
         </div>
 
         <div className="bg-card border border-border/50 rounded-3xl shadow-sm flex-1 mt-4 overflow-hidden flex">
           <div className="flex-1 flex flex-col min-w-0">
             {activeTab === 'findings' && <FindingsTab threats={modelData.threats} model={modelData} onThreatSelect={handleThreatSelect} />}
-            {activeTab === 'threats' && <ThreatCatalogTab threats={modelData.threats} framework={modelData.framework} selectedThreatId={selectedThreatId} />}
+            {activeTab === 'threats' && <ThreatCatalogTab threats={modelData.threats} framework={modelData.framework} selectedThreatId={selectedThreatId}
+              onReview={modelData.quality ? threatId => { setSelectedThreatId(threatId); setActiveTab('review'); } : undefined} />}
             {activeTab === 'c4' && <C4ArchitectureTab srg={modelData.srg} modelId={modelData.id} threats={modelData.threats} onThreatSelect={handleThreatSelect} />}
-            {activeTab === 'mitigations' && <MitigationsTab threats={modelData.threats} modelId={modelData.id} />}
+            {activeTab === 'mitigations' && (modelData.quality
+              ? <AssessmentReview model={modelData} initialRiskId={selectedThreatId} onDirtyChange={handleReviewDirty} />
+              : <MitigationsTab threats={modelData.threats} modelId={modelData.id} />)}
             {activeTab === 'compliance' && <ComplianceTab gaps={modelData.complianceGaps} />}
+            {activeTab === 'review' && modelData.quality && <AssessmentReview model={modelData} initialRiskId={selectedThreatId} onDirtyChange={handleReviewDirty} />}
           </div>
 
           <CopilotSidebar 

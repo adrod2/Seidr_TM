@@ -62,8 +62,9 @@ export function resolveGitHubResource(value) {
     const languages = path.length === 1 && path[0] === 'languages';
     const release = path.length === 2 && path[0] === 'releases' && path[1] === 'latest';
     const tree = path.length === 3 && path[0] === 'git' && path[1] === 'trees' && path[2].length <= 256;
+    const commit = path.length === 2 && path[0] === 'commits' && path[1].length <= 256;
     const query = [...url.searchParams];
-    if (root !== 'repos' || !validRepository(owner, repo) || !(metadata || languages || release || tree)
+    if (root !== 'repos' || !validRepository(owner, repo) || !(metadata || languages || release || tree || commit)
       || (query.length && !(tree && query.length === 1 && query[0][0] === 'recursive' && query[0][1] === '1'))) {
       throw new GitHubError(400, 'Unsupported GitHub repository resource.');
     }

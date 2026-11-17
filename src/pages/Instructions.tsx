@@ -156,10 +156,11 @@ export const Instructions = () => {
 
           <div className="border border-border/50 rounded-2xl p-5 bg-secondary/10">
             <CheckSquare className="h-8 w-8 text-emerald-500 mb-4" />
-            <h4 className="font-bold text-base mb-2">Mitigation Plan (Kanban)</h4>
+            <h4 className="font-bold text-base mb-2">Mitigation Plan &amp; Evidence Review</h4>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              A drag-and-drop board turning threats into actionable tasks. Every threat gets a tailored mitigation strategy. 
-              You can move tasks to "In Progress", "Done", or "Exception" (which requires a mandatory business justification).
+              New assessments use structured actions with confirmed owners, dependencies, acceptance tests and retained verification artifacts.
+              A completed task is not verified mitigation: closure needs passing proof for the assessed environment and an owned decision.
+              Accepted risks are recorded separately with rationale, expiry and review triggers. Older mitigation notes remain read-only and unverified.
             </p>
           </div>
 
@@ -167,8 +168,9 @@ export const Instructions = () => {
             <FileCheck className="h-8 w-8 text-primary mb-4" />
             <h4 className="font-bold text-base mb-2">Compliance & Business Risk</h4>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Shows how your threats map against required frameworks (like NIST SP 800-53) and highlights which specific 
-              mandatory controls are failing. It also maps gaps against your global Business Risk Register.
+              Shows proposed threat-to-control mappings for review, not certification or proof of failing controls.
+              No mappings does not mean compliant. Business risk uses a separately approved 5-by-5 likelihood/impact matrix;
+              inherent, current and conditional target ratings are distinct. Unknown is Not rated, never Low. CVSS and DREAD remain separate technical measures.
             </p>
           </div>
         </div>
@@ -180,7 +182,9 @@ export const Instructions = () => {
             <p className="text-sm text-blue-600/80 dark:text-blue-300/80 leading-relaxed">
               Use the <strong>"Export Report"</strong> button at the top right of any report to generate a professional PDF, CSV, or JSON file. 
               The PDF includes a findings summary, a severity-ranked index, the component-level C4 diagram, and full finding details: scores, framework categories, affected components, evidence, exploitation paths, exploitation risk and all mitigation actions. Compliance mappings and input-coverage limitations are included too. Choose <strong>Save as PDF</strong> in the print dialog and disable browser headers/footers for the cleanest layout.
-              You can select a target language (e.g., Spanish, German) before export. Identifiers, scores, framework categories and architecture remain unchanged. Missing information in older assessments is explicitly marked rather than invented.
+              You can select a target language (e.g., Spanish, German) before export. Identifiers, scores, framework categories and architecture remain unchanged.
+              Structured evidence/decision records preserve original wording and currently English labels. New JSON exports include a versioned decision register and source manifest, not full source text or original files.
+              Save review drafts before exporting. Missing information in older assessments is explicitly marked rather than invented. Approvals and proof are local self-attestations, not independent verification.
             </p>
           </div>
         </div>

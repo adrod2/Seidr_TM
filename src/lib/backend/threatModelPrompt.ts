@@ -25,6 +25,9 @@ Repository metadata and documentation are independent context sources, not just 
 In the "evidence" field, name the source(s) the evidence comes from (e.g. "Document: Answers.pdf [Page 3]", "Diagram: network.png", "Website", "System description").
 Identify potential threats in deep detail by correlating the architecture with the provided context.
 Map findings to the graph using "affectedComponentIds" and "affectedFlowIds" arrays of EXACT existing SRG component and edge IDs. Include all evidenced affected targets, and use empty arrays where no target is established. Do not invent IDs or infer that every adjacent flow is vulnerable. Keep "componentId" as the primary affected component ID for compatibility.
+Include a "qualityProposal" for each finding. Record actor, preconditions, action, asset and consequence separately.
+Cite only supplied Source IDs and exact retained-text quotes with startLine/endLine (1-based). A generated summary is not primary-source verification. "Observed" means a reproducible artifact observation, NOT a proven deployment configuration, effective control or successful exploit.
+Use "Documented but unverified", "Hypothesis" or "Not assessed" whenever appropriate. State why confidence is justified and request missing evidence with a supplier role and concrete verification step. Never invent an owner, evidence, likelihood or business-impact score. All controls are unverified proposals until reviewed.
 
 Return ONLY a valid JSON array of objects with this EXACT structure:
 [
@@ -35,6 +38,15 @@ Return ONLY a valid JSON array of objects with this EXACT structure:
     "evidence": "string (cite exact components and source references supporting the threat; label missing information and assumptions rather than treating them as proof)",
     "reasoning": "string (explain how an attacker would exploit this vulnerability)",
     "exploitationRisk": "string (qualitative assessment of required access, attack prerequisites, relevant controls, uncertainty and potential impact; distinguish modeled risk from verified exploitation, and do not invent a probability)",
+    "qualityProposal": {
+      "scenario": { "actor": "Actor or failure source", "preconditions": "Required conditions or explicit unknown", "action": "Threatening action or failure", "asset": "Specific data or capability", "consequence": "Business or affected-person consequence" },
+      "frameworkTags": ["Applicable taxonomy: category"],
+      "evidenceStatus": "Observed | Documented but unverified | Hypothesis | Not assessed",
+      "confidence": { "level": "Low | Medium | High", "reason": "Evidence quality and material uncertainty" },
+      "references": [],
+      "controls": [],
+      "missingEvidence": [{ "question": "Unverified material claim", "supplier": "Role able to supply proof", "verification": "Specific check and expected artifact" }]
+    },
     "category": "string (the threat category according to the ${framework} framework)",
     "componentId": "string (name of the vulnerable component from the SRG id or name)",
     "affectedComponentIds": ["exact SRG component ID, or empty array if unknown"],

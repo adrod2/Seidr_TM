@@ -37,16 +37,19 @@ interface RepositoryInput extends ContextInput {
   threats: Threat[];
   scannedFiles: ScannedFile[];
   sources: ContextInput[];
+  evidenceSources: RepositorySource[];
 }
 
 export const prepareRepositorySources = (
   sources: RepositorySource[],
   digest: DocumentDigest,
 ): Promise<RepositorySource[]> => mapLimit(sources, 3, async source => {
-  if (source.status === 'failed' || source.status === 'excluded') return { ...source, text: '' };
+  if (source.status === 'failed' || source.status === 'excluded') return { ...source, text: '', originalText: '' };
   const prepared = await prepareSourceText(`${source.url} (${source.name})`, source.text, digest);
+  const original = sanitiseSection(source.originalText ?? source.text);
   return {
     ...source, text: prepared.text, sourceChars: source.sourceChars ?? source.text.length,
+    originalText: original.passed ? original.text : '',
     status: prepared.status === 'included' ? source.status || 'included'
       : prepared.status === 'digested' && source.status === 'truncated' ? 'truncated' : prepared.status,
     note: [source.note, prepared.note].filter(Boolean).join(' ') || undefined,
@@ -80,17 +83,18 @@ export const analyseRepositories = (
     const findings = result.inherentVulnerabilities || [];
     const files = result.scannedFiles || [];
     const sources = (result.contextSources || []).map(sourceInput);
+    const evidenceSources = result.contextSources || [];
     const note = result.collectionNotes?.join(' ');
     if (result.codeAnalysisError) {
       return {
         status: { ...base, status: 'failed', note: [result.codeAnalysisError, note].filter(Boolean).join(' ') },
-        threats: [], scannedFiles: files.map(file => ({ ...file, repositoryUrl: url })), sources,
+        threats: [], scannedFiles: files.map(file => ({ ...file, repositoryUrl: url })), sources, evidenceSources,
       };
     }
     const summary = findings.map(t => `- ${t.title} (${t.severity}): ${t.evidence || t.description}`).join('\n');
     const clean = sanitiseSection(`Inferred purpose and architecture:\n${result.inferredPurpose}${summary ? `\n\nCode-level findings:\n${summary}` : ''}`);
     if (!clean.passed) {
-      return { status: { ...base, status: 'excluded', note: clean.reason }, threats: [], scannedFiles: [], sources };
+      return { status: { ...base, status: 'excluded', note: clean.reason }, threats: [], scannedFiles: [], sources, evidenceSources };
     }
     return {
       section: { kind: 'repository', name: `Repository: ${url}`, detail: `${files.length} file(s) scanned`, text: clean.text },
@@ -102,9 +106,10 @@ export const analyseRepositories = (
       })),
       scannedFiles: files.map(file => ({ ...file, repositoryUrl: url })),
       sources,
+      evidenceSources,
     };
   } catch (error) {
     console.warn(`Repository analysis failed for ${url}; continuing with other inputs.`, error);
-    return { status: { ...base, status: 'failed', note: getErrorMessage(error) }, threats: [], scannedFiles: [], sources: [] };
+    return { status: { ...base, status: 'failed', note: getErrorMessage(error) }, threats: [], scannedFiles: [], sources: [], evidenceSources: [] };
   }
 });

@@ -17,6 +17,11 @@ export interface AnalysisDiagram {
 
 export interface AnalysisPayload {
   name: string;
+  systemId?: string;
+  parentAssessmentId?: string;
+  environment?: string;
+  systemVersion?: string;
+  scope?: string;
   /** The system description sent to the pipeline, including its fallback when no input was supplied. */
   description: string;
   frameworks: string[];
@@ -95,6 +100,11 @@ export function getRedoInputs(model: ThreatModel, saved?: ModelInputs): { payloa
   if (saved) {
     if (saved.version !== 1 || saved.modelId !== model.id) throw new Error('Saved assessment inputs do not match this threat model.');
     const payload = structuredClone(saved.payload);
+    payload.systemId = model.quality?.systemId || payload.systemId || `legacy:${model.id}`;
+    payload.parentAssessmentId = model.id;
+    payload.environment = model.quality?.environment ?? payload.environment;
+    payload.systemVersion = model.quality?.systemVersion ?? payload.systemVersion;
+    payload.scope = model.quality?.scope ?? payload.scope;
     // Re-fetch changeable external sources when the new assessment runs.
     delete payload.webIntelligence;
     const missingFiles = (payload.documents || []).some((_, i) => !payload.inputFiles?.documents[i])
@@ -128,6 +138,7 @@ export function getRedoInputs(model: ThreatModel, saved?: ModelInputs): { payloa
   return {
     payload: {
       name: model.name, description, userDescription: description, frameworks: [model.framework || 'STRIDE'],
+      systemId: model.quality?.systemId || `legacy:${model.id}`, parentAssessmentId: model.id,
       repositoryUrls: [...repositories], sourceUrl: meta?.sourceUrl,
       documents, localDocuments: [...documentNames],
       diagrams: diagramNames.map(name => {
