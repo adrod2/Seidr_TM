@@ -814,11 +814,11 @@
                           "references": {
                             "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/risks/items/properties/references"
                           },
-                          "controls": {
-                            "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/risks/items/properties/controls"
-                          },
                           "missingEvidence": {
                             "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/risks/items/properties/missingEvidence"
+                          },
+                          "controls": {
+                            "$ref": "#/definitions/SeidrAssessment/properties/assessment/properties/risks/items/properties/controls"
                           }
                         },
                         "required": [
@@ -827,7 +827,6 @@
                           "evidenceStatus",
                           "confidence",
                           "references",
-                          "controls",
                           "missingEvidence"
                         ],
                         "additionalProperties": false

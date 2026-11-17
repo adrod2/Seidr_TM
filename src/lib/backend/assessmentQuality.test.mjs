@@ -160,6 +160,16 @@ test('planned controls cannot lower current risk or attest their own effectivene
   assert.equal(generated.quality.risks[0].controls[0].verified, false);
 });
 
+test('loosely shaped agent controls are normalized into unverified proposals', () => {
+  const [threat] = parseThreats([{ ...finding, qualityProposal: { ...finding.qualityProposal,
+    controls: ['Rate limiting', { name: 'WAF', status: 'planned' }, { control: 'MFA', state: 'Current', verified: true, artifactSourceIds: ['SRC-X'] }, {}, ''] } }], true);
+  assert.deepEqual(threat.qualityProposal.controls, [
+    { description: 'Rate limiting', state: 'Proposed', verified: false, artifactSourceIds: [] },
+    { description: 'WAF', state: 'Planned', verified: false, artifactSourceIds: [] },
+    { description: 'MFA', state: 'Current', verified: false, artifactSourceIds: [] },
+  ]);
+});
+
 test('expired acceptance and unverifiable closure remain explicit blockers', async () => {
   const { quality } = await assessment([finding]);
   const risk = quality.risks[0];

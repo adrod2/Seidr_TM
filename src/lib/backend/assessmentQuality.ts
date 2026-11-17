@@ -113,8 +113,24 @@ export const registeredRequirementIds = (requirements: AssessmentQuality['requir
   requirement.id, ...(requirement.externalId && requirements.filter(item => item.externalId === requirement.externalId).length === 1 ? [requirement.externalId] : []),
 ]);
 export type RiskRating = z.infer<typeof ratingSchema>;
+const controlStates = ['Current', 'Proposed', 'Planned', 'Assumed'] as const;
+// Agents often return controls as strings or loosely keyed objects; keep them as unverified proposals instead of failing the run.
+function normalizeProposedControl(value: unknown) {
+  const item = typeof value === 'string' ? { description: value } : value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const description = [item.description, item.control, item.name, item.title, item.summary]
+    .find((entry): entry is string => typeof entry === 'string' && !!entry.trim())?.trim();
+  if (!description) return null;
+  const rawState = [item.state, item.status].find(entry => typeof entry === 'string') as string | undefined;
+  const state = controlStates.find(entry => entry.toLowerCase() === rawState?.trim().toLowerCase()) || 'Proposed';
+  return { description, state, verified: false, artifactSourceIds: [] };
+}
 export const riskProposalSchema = riskSchema.pick({
-  scenario: true, frameworkTags: true, evidenceStatus: true, confidence: true, references: true, controls: true, missingEvidence: true,
+  scenario: true, frameworkTags: true, evidenceStatus: true, confidence: true, references: true, missingEvidence: true,
+}).extend({
+  controls: z.preprocess(
+    value => (Array.isArray(value) ? value : []).map(normalizeProposedControl).filter(Boolean),
+    riskSchema.shape.controls,
+  ),
 });
 export type RiskProposal = z.infer<typeof riskProposalSchema>;
 

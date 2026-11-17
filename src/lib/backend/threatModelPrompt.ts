@@ -44,7 +44,7 @@ Return ONLY a valid JSON array of objects with this EXACT structure:
       "evidenceStatus": "Observed | Documented but unverified | Hypothesis | Not assessed",
       "confidence": { "level": "Low | Medium | High", "reason": "Evidence quality and material uncertainty" },
       "references": [],
-      "controls": [],
+      "controls": [{ "description": "Relevant control (optional; use [] if none)", "state": "Proposed | Planned | Assumed", "verified": false, "artifactSourceIds": [] }],
       "missingEvidence": [{ "question": "Unverified material claim", "supplier": "Role able to supply proof", "verification": "Specific check and expected artifact" }]
     },
     "category": "string (the threat category according to the ${framework} framework)",
